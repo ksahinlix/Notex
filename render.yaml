@@ -1,0 +1,23 @@
+# Render Blueprint: one free web service that serves both the API and the
+# built web app (same origin -> no CORS, strict cookies).
+# Secrets (DATABASE_URL, SESSION_SECRET, APP_PASSWORD_HASH) are set in the
+# Render dashboard, never committed.
+services:
+  - type: web
+    name: notex
+    runtime: node
+    plan: free
+    buildCommand: cd web && npm ci --include=dev && npm run build && cd ../server && npm ci --omit=dev
+    startCommand: cd server && npm run migrate && npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: APP_PASSWORD_HASH
+        sync: false
