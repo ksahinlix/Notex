@@ -7,7 +7,7 @@ services:
     name: notex
     runtime: node
     plan: free
-    buildCommand: cd web && npm ci && npm run build && cd ../server && npm ci --omit=dev
+    buildCommand: cd web && npm ci --include=dev && npm run build && cd ../server && npm ci --omit=dev
     startCommand: cd server && npm run migrate && npm start
     healthCheckPath: /api/health
     envVars:

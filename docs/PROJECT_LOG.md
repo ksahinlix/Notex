@@ -254,3 +254,11 @@ database. `npm run migrate` created the tables, and `/api/health` returned
 - The Neon password and `SESSION_SECRET` were shared in a chat, so both were
   rotated.
 **Next:** run the web app locally and log in, then deploy to Render.
+
+### 2026-09-22 — Render build fix
+**What:** The Render build now runs `npm ci --include=dev` in `web/`.
+**Why:** `render.yaml` sets `NODE_ENV=production`, which makes a plain `npm ci`
+skip devDependencies. The web build needs those (Vite, TypeScript), so the
+first deploy would have failed.
+**How verified:** Ran the exact build command with `NODE_ENV=production` in a
+clean checkout. Install and build both succeeded.
