@@ -262,3 +262,69 @@ skip devDependencies. The web build needs those (Vite, TypeScript), so the
 first deploy would have failed.
 **How verified:** Ran the exact build command with `NODE_ENV=production` in a
 clean checkout. Install and build both succeeded.
+
+### 2026-09-22 — Notes interface (ported from the prototype)
+**What we did:** Replaced the placeholder home screen with the real notes UI.
+- **Folder tree** (sidebar): counts, expand/collapse, select to filter, lock
+  icons, and drag a note onto a folder to move it.
+- **Composer** (bottom bar):
+  - Text, and a path with autocomplete from existing folders. Selecting a
+    folder pre-fills the path.
+  - List-item toggle, reminder date/time, and images (button, paste or drop).
+  - Ctrl+Enter saves.
+- **Note cards:**
+  - List-item checkbox, images with a lightbox, reading mode, and comments.
+  - Editing changes text, path (so it also works as "move") and reminder.
+  - Delete asks for confirmation first.
+- **Locked folders:**
+  - The password is asked twice when a folder is first protected, with a
+    warning that a forgotten password means lost notes.
+  - Protecting a folder encrypts the notes already in it. Locking hides them.
+  - Nested protected folders are refused, for simplicity.
+- **Search:** case-insensitive with Turkish rules (İ/ı). It covers text,
+  comments and path. Locked notes are skipped.
+- **Reminders strip:** from 24 hours ago onward. Overdue items are shown in red.
+- **Session handling:** an expired login returns to the login screen. An HTML
+  error page (e.g. while Render wakes up) no longer crashes the app.
+
+**How:**
+- `src/state/store.ts` is a small external store used through
+  `useSyncExternalStore`. Async actions always see the latest data, which
+  avoids the stale-state problems of the prototype's single component.
+- Every change is applied locally first, then `PUT` to the server. On a 409 the
+  server's version replaces the local one (D9).
+- Pure note logic lives in `src/lib/notes.ts` (seal/open, blocks, search).
+- Images are downscaled to at most 1600 px (JPEG) before saving, to spare
+  Neon's 0.5 GB.
+
+**Simplified compared with the prototype (on purpose, for now):**
+- The composer is a plain textarea plus image attachments. Images appear after
+  the text, not inline, and rich paste from Word/web pages is not supported yet.
+- No AI path suggestion yet: the path is typed. The AI will plug into the
+  composer later (D3).
+- Comments have no "source" (user/Claude/ChatGPT). With no chatbot (D3) it
+  isn't needed.
+
+**How it was verified:**
+- Unit tests: 12 web tests (5 new, for sealing, opening, blocks and search),
+  plus typecheck, lint and build.
+- Browser test with Playwright/Chromium against a real Postgres and the built
+  app served by the server: 27 checks passed.
+  - Covered: login, adding notes (image, list item, reminder), check/uncheck,
+    search, folder filter.
+  - Protecting a folder, including checking in the database that there is no
+    plaintext left, not even the reminder label.
+  - Locking, a wrong and a right folder password, and a new note in a protected
+    folder being encrypted.
+  - Editing a note's path to move it out of a protected folder (it is
+    decrypted), comments, drag & drop moving (images kept).
+  - Reload persistence, and deletion leaving a tombstone.
+  - No horizontal scroll at phone width (390 px), and an expired session
+    returning to login.
+- The login rate limiter also triggered during repeated test runs, as designed.
+
+**Next:**
+1. The owner checks the Render deploy (https://notex-r2zk.onrender.com).
+2. Offline-first: IndexedDB copy and background sync (D9).
+3. AI: embedding search, then path suggestion in the composer (D3).
+4. PWA: manifest, service worker, installable.

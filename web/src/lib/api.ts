@@ -12,6 +12,9 @@ export class ApiError extends Error {
   }
 }
 
+/** Fired when the login session has expired; App returns to the login screen. */
+export const UNAUTHORIZED_EVENT = 'notex:unauthorized'
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
     method,
@@ -20,7 +23,13 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     credentials: 'same-origin',
   })
   const text = await res.text()
-  const data = text ? JSON.parse(text) : null
+  let data: unknown = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    data = { error: text.slice(0, 200) } // e.g. an HTML error page while Render wakes up
+  }
+  if (res.status === 401 && !path.startsWith('/api/auth/')) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
   if (!res.ok) throw new ApiError(res.status, data)
   return data as T
 }

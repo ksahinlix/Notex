@@ -20,8 +20,15 @@ New decisions go in the Decisions table and get their own section. Update
   - Schema in `db/schema.sql`; it must stay idempotent because it runs on
     every deploy.
 - `web/`: Vite + React + TypeScript.
-  - Shared logic lives in `src/lib/` (types, api, crypto, tree), each with
-    `*.test.ts` next to it.
+  - Pure logic lives in `src/lib/` (types, api, crypto, tree, notes, format,
+    images), with `*.test.ts` next to the testable ones.
+  - `src/state/store.ts`: the app store (notes, folders, unlocked keys,
+    password prompts). All note changes go through it: local update first,
+    then `PUT` to the server.
+  - `src/components/`: UI (NotesPage, Sidebar, NoteCard, Composer,
+    PasswordModal, Lightbox, Reminders).
+- UI changes: check them in a real browser (Playwright with Chromium at
+  `/opt/pw-browsers/chromium` in cloud sessions) on desktop and at phone width.
 - `docs/prototype.jsx`: the original prototype, a design reference only. Don't
   import from it.
 
