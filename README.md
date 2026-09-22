@@ -17,15 +17,33 @@ render.yaml  deployment config for Render
 
 ## Running locally
 
-Requirements: **Node.js 22+**, and a Postgres database (a free
-[Neon](https://neon.tech) project is fine).
+Requirements: **Node.js 22+**, [Git](https://git-scm.com), and a Postgres
+database (a free [Neon](https://neon.tech) project is fine).
+
+### 0. Get the code
+
+```bash
+git clone https://github.com/ksahinlix/Notex.git
+cd Notex
+```
+
+> **Windows (PowerShell):** the commands below are one per line, so they work
+> in PowerShell as-is. Notes:
+> - Windows PowerShell 5 doesn't support `&&`. Run chained commands one at a time.
+> - If `npm` fails with *"running scripts is disabled on this system"*, run
+>   `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or type `npm.cmd`
+>   instead of `npm`.
+> - Put arguments in **single quotes** (`'my pa$$word'`). Inside double quotes
+>   PowerShell treats `$` as a variable.
+> - Create `.env` with `Copy-Item` or a text editor, not `echo ... > .env`.
+>   Windows PowerShell 5 writes UTF-16, which Node can't read.
 
 ### 1. Server
 
 ```bash
 cd server
 npm install
-cp .env.example .env
+cp .env.example .env      # PowerShell: Copy-Item .env.example .env
 ```
 
 Fill in `server/.env`:
@@ -34,7 +52,7 @@ Fill in `server/.env`:
 |----------|---------------|
 | `DATABASE_URL` | Neon dashboard → your project → **Connect** → copy the connection string |
 | `SESSION_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
-| `APP_PASSWORD_HASH` | `npm run hash-password -- "your password"`, then paste it in **single quotes** |
+| `APP_PASSWORD_HASH` | `node scripts/hash-password.js 'your password'`, then paste the output in **single quotes** |
 
 Then:
 

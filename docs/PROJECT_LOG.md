@@ -230,3 +230,11 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 6. PWA: manifest, service worker, install prompt.
 7. Reminders via Web Push and an external cron.
 8. Phase 2: backups to the home server.
+
+### 2026-09-22 — Windows setup notes
+**What:** Added a "Get the code" step and Windows PowerShell notes to the README.
+**Why:** The first local setup on Windows failed. Windows PowerShell 5 doesn't
+accept `&&`, and the `server/` folder had been created by hand instead of
+cloning the repository.
+**How:** Commands are now one per line. The README also covers PowerShell
+execution policy, `$` inside quotes, and UTF-16 `.env` files.
