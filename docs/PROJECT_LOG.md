@@ -238,3 +238,19 @@ accept `&&`, and the `server/` folder had been created by hand instead of
 cloning the repository.
 **How:** Commands are now one per line. The README also covers PowerShell
 execution policy, `$` inside quotes, and UTF-16 `.env` files.
+
+### 2026-09-22 — First local run against Neon
+**What:** The owner ran the server locally on Windows against the real Neon
+database. `npm run migrate` created the tables, and `/api/health` returned
+`{"ok":true,"db":"up"}`.
+**Problems hit and fixes:**
+- PowerShell blocked `npm.ps1`. Fixed with
+  `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+- Neon returned `password authentication failed`: `.env` still had the old
+  password after a reset. Fixed by using the copy button in Neon's Connect
+  dialog, which copies the real password instead of the on-screen `****`.
+- `pg` printed an SSL warning for `sslmode=require`. `sslmode=verify-full` is
+  equivalent and silences it (added to the README).
+- The Neon password and `SESSION_SECRET` were shared in a chat, so both were
+  rotated.
+**Next:** run the web app locally and log in, then deploy to Render.

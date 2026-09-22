@@ -50,7 +50,7 @@ Fill in `server/.env`:
 
 | Variable | How to get it |
 |----------|---------------|
-| `DATABASE_URL` | Neon dashboard → your project → **Connect** → copy the connection string |
+| `DATABASE_URL` | Neon dashboard → your project → **Connect** → use the copy button (the password is hidden as `****` on screen). Change `sslmode=require` to `sslmode=verify-full` to silence a warning from `pg`. |
 | `SESSION_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `APP_PASSWORD_HASH` | `node scripts/hash-password.js 'your password'`, then paste the output in **single quotes** |
 
