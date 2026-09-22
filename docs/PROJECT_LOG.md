@@ -328,3 +328,27 @@ clean checkout. Install and build both succeeded.
 2. Offline-first: IndexedDB copy and background sync (D9).
 3. AI: embedding search, then path suggestion in the composer (D3).
 4. PWA: manifest, service worker, installable.
+
+### 2026-09-23 — Save retries after "Değişiklik sunucuya kaydedilemedi"
+**What happened:** When adding notes locally, the owner saw the red banner
+"Değişiklik sunucuya kaydedilemedi". The database showed that the notes *had*
+been saved, so a single request had failed (most likely while Neon's compute
+was waking up), and the banner then never cleared.
+**Real problem found:** a failed save was never retried. The change stayed on
+screen but was lost on reload.
+**What we changed:**
+- `web/src/state/store.ts`: unsaved changes are kept in a queue (newest version
+  per note) and retried with growing delays (2 s → 30 s). The banner shows the
+  reason (HTTP code or "sunucuya ulaşılamadı") and clears once everything is
+  saved. A 401 asks the user to log in again instead of retrying. The browser
+  warns before closing the tab while saves are pending. Logout clears the queue.
+- `web/src/lib/api.ts`: non-JSON error responses (e.g. the dev proxy's error
+  page) no longer throw a parse error.
+- `server/src/db.js`: `pool.on("error")` handler, so Neon closing an idle
+  connection can't crash the server.
+**How verified:** 2 new store tests (a failed save is retried and the error
+clears; only the newest edit is retried). 14 web tests pass, plus typecheck and
+lint. Diagnosis: the exact insert was replayed in a rolled-back transaction on
+Neon, and an authenticated save through the Vite proxy returned 200.
+**Next:** proper offline-first storage (IndexedDB) so queued saves also survive
+a page reload.

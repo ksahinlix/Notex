@@ -52,6 +52,9 @@ export class NotexStore {
   }
 
   reset() {
+    this.pending.clear()
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.retryTimer = null
     this.set(initial)
   }
 
@@ -80,18 +83,55 @@ export class NotexStore {
     this.set({ notes: notes.sort(byNewest), plain })
   }
 
-  private async push(note: Note) {
+  // Saves that haven't reached the server yet: noteId -> newest version.
+  // Failed saves are retried with growing delays (network drop, Render or Neon
+  // waking up). A newer edit of the same note replaces the queued version.
+  private pending = new Map<string, Note>()
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
+  private retryDelay = 0
+
+  hasPendingSaves() {
+    return this.pending.size > 0
+  }
+
+  private push(note: Note) {
+    this.pending.set(note.id, note)
+    void this.pushOne(note)
+  }
+
+  private async pushOne(note: Note) {
     try {
       await api.saveNote(note)
+      if (this.pending.get(note.id) === note) this.pending.delete(note.id)
+      if (!this.pending.size) {
+        this.retryDelay = 0
+        if (this.state.syncError.startsWith('Değişiklik')) this.set({ syncError: '' })
+      }
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
+        // The server has a newer version; it wins (D9).
+        if (this.pending.get(note.id) === note) this.pending.delete(note.id)
         const current = (e.body as { current: Note }).current
         const key = this.keyIfUnlocked(current.path)
         this.upsertLocal(current, current.encrypted && key ? await open(current, key).catch(() => undefined) : undefined)
-      } else {
-        this.set({ syncError: 'Değişiklik sunucuya kaydedilemedi.' })
+        return
       }
+      this.set({ syncError: `Değişiklik sunucuya kaydedilemedi (${describeError(e)}). Tekrar deneniyor...` })
+      if (e instanceof ApiError && e.status === 401) {
+        this.set({ syncError: 'Oturum sona erdi. Değişikliklerin kaybolmaması için sayfayı yenilemeden önce tekrar giriş yap.' })
+        return
+      }
+      this.scheduleRetry()
     }
+  }
+
+  private scheduleRetry() {
+    if (this.retryTimer) return
+    this.retryDelay = Math.min(this.retryDelay ? this.retryDelay * 2 : 2000, 30_000)
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
+      for (const n of this.pending.values()) void this.pushOne(n)
+    }, this.retryDelay)
   }
 
   dismissError() {
@@ -243,7 +283,23 @@ export class NotexStore {
   }
 }
 
+/** Short reason for an error, shown to the user so problems can be diagnosed. */
+function describeError(e: unknown): string {
+  if (e instanceof ApiError) {
+    const msg = (e.body as { error?: string } | null)?.error
+    return msg ? `${e.status}: ${msg}` : `HTTP ${e.status}`
+  }
+  return e instanceof TypeError ? 'sunucuya ulaşılamadı' : String(e)
+}
+
 export const store = new NotexStore()
+
+// Warn before closing the tab while a change is still waiting to be saved.
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', (e) => {
+    if (store.hasPendingSaves()) e.preventDefault()
+  })
+}
 
 export function useNotex(): State {
   return useSyncExternalStore(store.subscribe, store.getSnapshot)

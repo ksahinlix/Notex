@@ -9,3 +9,7 @@ export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   max: 5,
 });
+
+// Neon closes idle connections when its compute suspends. Without this
+// handler, pg would re-emit that as an unhandled error and crash the server.
+pool.on("error", (err) => console.error("Postgres idle client error:", err.message));
