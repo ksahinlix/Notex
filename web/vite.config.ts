@@ -5,6 +5,10 @@ import { defineConfig } from 'vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // The AI worker (src/ai/embed.worker.ts) is an ES module.
+  worker: { format: 'es' },
+  // transformers.js loads its WASM runtime itself; don't pre-bundle it.
+  optimizeDeps: { exclude: ['@huggingface/transformers'] },
   server: {
     // In development the API runs separately on :8000. Proxying keeps the
     // browser on one origin, exactly like production (where the server

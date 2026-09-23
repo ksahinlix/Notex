@@ -44,6 +44,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D9 | Sync model: client-generated IDs, last-write-wins, soft deletes | Active |
 | D10 | Web stack: Vite + React + TypeScript; server in plain JavaScript | Active |
 | D11 | Home server is only a backup target (Phase 2) | Active |
+| D12 | Embedding model: multilingual-e5-small, opt-in, in a Web Worker | Active |
 
 ### D1 — Start from scratch
 - **What:** New repository structure. `docs/prototype.jsx` is kept only as a
@@ -169,6 +170,45 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 - **Why:** Its hardware is too weak for LLMs and its disk is old. It is a good
   second copy of the data, but not a good primary host.
 
+### D12 — Embedding model: multilingual-e5-small
+- **What:**
+  - Model `Xenova/multilingual-e5-small`, 8-bit (~118 MB, downloaded once from
+    Hugging Face and cached by the browser). It runs in a Web Worker
+    (`web/src/ai/`), so the UI never freezes.
+  - AI is **opt-in**: the ✨ AI button in the header turns it on, shows the
+    download progress, and is remembered per browser.
+  - **Folder suggestion:** each existing page (note path) is scored 60% by its
+    two closest notes and 40% by its name. The top 3 are shown as chips, and
+    the best one fills the path until the user types a path or picks a folder.
+  - **Search:** results are ranked by meaning. Notes containing the typed words
+    get a bonus and stay on top. Only notes close to the best match are shown
+    (e5 scores are compressed, so the window is relative: best − 0.035, max 12).
+  - Vectors of plain notes are cached in IndexedDB (keyed by a hash of the
+    text). Vectors of encrypted notes stay in memory only.
+- **Why (measured with `web/scripts/eval-ai.mjs`, 28 Turkish notes in 11 folders,
+  16 new notes, 10 searches):**
+
+  | Model | Download | Right folder 1st / in top 3 | Search hits |
+  |---|---|---|---|
+  | **multilingual-e5-small** | **118 MB** | 11 / **16 of 16** | 11/20 |
+  | paraphrase-multilingual-MiniLM | 118 MB | 11 / 13 | 12/20 |
+  | paraphrase-multilingual-mpnet | 279 MB | 13 / 15 | 13/20 |
+  | EmbeddingGemma-300m (q4) | 197 MB | 13 / 16 | 12/20, ~7× slower |
+
+  - e5-small was best where it matters most (the right folder is among the 3
+    chips), smallest and fastest, which matters for phones (D2).
+  - No model separates relevant from unrelated notes with a clean score
+    threshold, so search ranks rather than filters. Keyword matching covers
+    exact words.
+  - Including the folder path in the embedded note text improved folder
+    suggestions.
+- **Not yet:** inventing *new* folder names and detecting reminder dates from
+  text need a small generative model (see D3). Today, a note on a new topic
+  gets the closest existing folder as a suggestion, and the user types a new
+  path.
+- **Revisit when:** a better small multilingual model appears. Re-run the eval
+  script with it.
+
 ---
 
 ## 3. Open questions
@@ -182,7 +222,9 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   minutes. iOS delivers web push only to PWAs added to the home screen.
 - **Rich-text editor:** the prototype uses `document.execCommand`, which is
   deprecated. Consider TipTap or Lexical when porting the composer.
-- **Generative model choice** for classification (see D3).
+- **Generative model choice** for new folder names and reminder dates (see
+  D3, D12). Candidates: Qwen / Gemma small models via WebLLM. Alternatively,
+  rule-based date parsing for Turkish ("yarın 10'da", "perşembe").
 
 ---
 
@@ -352,3 +394,38 @@ lint. Diagnosis: the exact insert was replayed in a rolled-back transaction on
 Neon, and an authenticated save through the Vite proxy returned 200.
 **Next:** proper offline-first storage (IndexedDB) so queued saves also survive
 a page reload.
+
+### 2026-09-23 — AI: search by meaning and folder suggestions
+**What:**
+- Picked the embedding model by measurement (D12). Four models were compared
+  on realistic Turkish notes.
+- `web/src/ai/`:
+  - `vector.ts`: ranking and suggestion logic (pure, tested).
+  - `embed.worker.ts` and `protocol.ts`: the model in a Web Worker.
+  - `engine.ts`: on/off setting, download progress, and the vector cache
+    (memory + IndexedDB, plain notes only).
+  - `useAi.ts`: React hooks.
+- UI:
+  - ✨ AI button in the header (confirm dialog, download %).
+  - Search ranks by meaning ("Anlamına göre sıralandı").
+  - The composer shows 3 folder chips and auto-fills the best one.
+- Server: gzip compression (the 27 MB WASM runtime goes over the wire as
+  ~7 MB) and one-year immutable caching for `/assets`.
+- The main bundle grew by only 10 KB; the AI code loads only when AI is on.
+
+**How verified:**
+- 5 new unit tests (19 web tests in total), plus typecheck, lint and build.
+- Browser test (Playwright/Chromium, real model, mocked API):
+  - First download and load: 14 s. After a reload: 3 s, from the browser
+    cache.
+  - Folder suggestions: the right folder was among the chips for 6 of 6 new
+    notes, and auto-filled for 4 of 6.
+  - Saving uses the suggested path, a typed path is never overwritten, and
+    clicking a chip sets the path.
+  - Search: "film", "doktor", "evde bozulan şeyler" and "toplantı" found the
+    expected notes at the top.
+  - No horizontal scroll at phone width, and no page errors.
+- Server: health, gzip and cache headers checked against the built app.
+
+**Next:** try it on real notes. Then a generative model for new folder names
+and reminder dates, offline-first storage, and PWA.

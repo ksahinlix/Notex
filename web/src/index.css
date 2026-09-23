@@ -180,3 +180,19 @@ textarea {
   .path-input { flex: 1 1 100%; }
   .note.expanded { padding: 16px; }
 }
+
+/* ---- AI ---- */
+.c-accent { color: var(--accent); }
+.topbar-actions { display: flex; gap: 8px; align-items: center; }
+.ai-toggle.ready { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.ai-toggle.error { color: var(--danger); border-color: #fecdca; }
+.spin { animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.search-note { font-size: 11px; color: var(--accent); display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.suggestions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.chip {
+  border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px;
+  cursor: pointer; background: var(--surface); color: var(--text);
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }

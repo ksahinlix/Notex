@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import NotesPage from './components/NotesPage'
 import { api, ApiError, UNAUTHORIZED_EVENT } from './lib/api'
+import { ai } from './ai/engine'
 import { store } from './state/store'
 
 type Status = 'loading' | 'loggedOut' | 'loggedIn'
@@ -21,6 +22,7 @@ export default function App() {
   async function logout() {
     await api.logout().catch(() => {})
     store.reset() // drop notes and folder keys from memory
+    ai.clearMemory() // and note vectors
     setStatus('loggedOut')
   }
 

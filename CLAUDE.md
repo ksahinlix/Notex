@@ -25,6 +25,8 @@ New decisions go in the Decisions table and get their own section. Update
   - `src/state/store.ts`: the app store (notes, folders, unlocked keys,
     password prompts). All note changes go through it: local update first,
     then `PUT` to the server.
+  - `src/ai/`: on-device embeddings (D12): model in a Web Worker, ranking in
+    `vector.ts`, hooks in `useAi.ts`. Model evaluation: `scripts/eval-ai.mjs`.
   - `src/components/`: UI (NotesPage, Sidebar, NoteCard, Composer,
     PasswordModal, Lightbox, Reminders).
 - UI changes: check them in a real browser (Playwright with Chromium at

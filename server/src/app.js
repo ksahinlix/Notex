@@ -1,5 +1,6 @@
 import express from "express";
 import cookieParser from "cookie-parser";
+import compression from "compression";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import {
@@ -14,6 +15,7 @@ import { protectedFoldersRouter } from "./routes/protectedFolders.js";
 export function createApp({ pool, sessionSecret, passwordHash, secureCookies = false, webDist = null }) {
   const app = express();
   app.set("trust proxy", 1); // Render sits behind a proxy; needed for req.ip / req.secure
+  app.use(compression()); // e.g. the AI runtime: 27 MB -> ~7 MB
   app.use(express.json({ limit: "10mb" })); // images are still inline data URLs for now
   app.use(cookieParser());
 
@@ -52,6 +54,9 @@ export function createApp({ pool, sessionSecret, passwordHash, secureCookies = f
   // In production the same server also serves the built web app (web/dist),
   // so the browser talks to a single origin: no CORS, strict cookies.
   if (webDist && existsSync(webDist)) {
+    // Built files have content hashes in their names, so they never change:
+    // let browsers keep them for a year (the AI runtime is downloaded once).
+    app.use("/assets", express.static(path.join(webDist, "assets"), { immutable: true, maxAge: "1y" }));
     app.use(express.static(webDist));
     app.get("/{*splat}", (_req, res) => res.sendFile(path.join(webDist, "index.html")));
   }
