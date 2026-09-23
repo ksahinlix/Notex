@@ -239,7 +239,11 @@ export class NotexStore {
 
   // ---- note actions ----
 
-  async create(path: string[], content: NoteContent, meta: { isListItem?: boolean; reminderAt?: string | null; isReminder?: boolean }): Promise<boolean> {
+  async create(
+    path: string[],
+    content: NoteContent,
+    meta: { isListItem?: boolean; reminderAt?: string | null; isReminder?: boolean; repeat?: Note['repeat'] },
+  ): Promise<boolean> {
     const { ok, key } = await this.keyForPath(path)
     if (!ok) return false
     const sealed = await seal(newNote(path, meta), content, key)
@@ -254,6 +258,19 @@ export class NotexStore {
     const sealed = await seal(note, content, key)
     this.upsertLocal(sealed, content)
     void this.push(sealed)
+  }
+
+  /** Changes plaintext metadata only (reminder time, repeat, done), no re-encryption needed. */
+  updateMeta(note: Note, patch: Partial<Pick<Note, 'reminderAt' | 'isReminder' | 'repeat' | 'reminderDoneUntil' | 'checked'>>) {
+    const updated = { ...note, ...patch, updatedAt: nowIso() }
+    this.upsertLocal(updated, this.contentOf(note))
+    void this.push(updated)
+  }
+
+  /** ✓ on a reminder: a one-time reminder is done; a repeating one skips this occurrence. */
+  completeReminder(note: Note, occurrence: Date | null) {
+    if (note.repeat && occurrence) this.updateMeta(note, { reminderDoneUntil: occurrence.toISOString() })
+    else this.updateMeta(note, { checked: true })
   }
 
   setChecked(note: Note, checked: boolean) {

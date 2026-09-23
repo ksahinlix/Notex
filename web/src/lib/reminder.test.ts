@@ -55,6 +55,26 @@ describe('parseReminder', () => {
     expect(at(text)).toBe(want)
   })
 
+  it.each([
+    ["Kredi kartı ekstresi her ayın 28'i", 'monthly', '2026-09-28 09:00'],
+    ["Kira her ayın 1'inde öde", 'monthly', '2026-10-01 09:00'],
+    ["Her ay 15'inde saat 10'da fatura", 'monthly', '2026-10-15 10:00'],
+    ["Aidat her ayın 31'i", 'monthly', '2026-10-31 09:00'], // September has no 31st
+    ['aylık abonelik ödemesi', 'monthly', '2026-10-23 09:00'],
+    ['Her pazartesi 10:00 ekip toplantısı', 'weekly', '2026-09-28 10:00'],
+    ['haftalık rapor', 'weekly', '2026-09-30 09:00'],
+    ["Her gün 8'de ilaç", 'daily', '2026-09-24 08:00'],
+    ['her akşam yürüyüş', 'daily', '2026-09-23 19:00'],
+    ['Her yıl 5 Mart doğum günü', 'yearly', '2027-03-05 09:00'],
+  ])('repeating: %s -> %s from %s', (text, repeat, first) => {
+    expect(parseReminder(text, NOW)?.repeat).toBe(repeat)
+    expect(at(text)).toBe(first)
+  })
+
+  it('one-time reminders have no repeat', () => {
+    expect(parseReminder('Yarın 15:00 diş hekimi', NOW)?.repeat).toBeUndefined()
+  })
+
   it('reports the reminder word as matched', () => {
     expect(parseReminder('Faturayı ödemeyi hatırlat', NOW)).toEqual({ date: null, matched: 'hatırlat' })
   })

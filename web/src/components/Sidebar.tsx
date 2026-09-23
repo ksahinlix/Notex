@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Lock, LockOpen } from 'lucide-react'
 import { pathKeyOf, pathStartsWith, type TreeNode } from '../lib/tree'
 import type { ProtectedFolder } from '../lib/types'
@@ -35,6 +35,17 @@ function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path:
   const { name, node, path, depth, selectedPath, folders, keys, onSelect, onLockClick, onDropNote } = props
   const [open, setOpen] = useState(depth < 1)
   const [dragOver, setDragOver] = useState(false)
+  // dragenter/dragleave also fire when moving over the row's own children
+  // (arrow, name, lock), so count them instead of toggling (no flicker).
+  const dragDepth = useRef(0)
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isNoteDrag = (e: React.DragEvent) => e.dataTransfer.types.includes('text/notex-note')
+  const endDrag = () => {
+    dragDepth.current = 0
+    setDragOver(false)
+    if (openTimer.current) clearTimeout(openTimer.current)
+    openTimer.current = null
+  }
   const children = Object.keys(node.children)
   const pk = pathKeyOf(path)
   const isProtected = folders.some((f) => f.pathKey === pk)
@@ -48,12 +59,27 @@ function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path:
       <div
         className={`tree-row ${isSelected ? 'selected' : ''} ${dragOver ? 'drag-over' : ''}`}
         style={{ paddingLeft: 8 + depth * 14 }}
-        onDragOver={(e) => e.preventDefault()}
-        onDragEnter={(e) => { e.preventDefault(); setDragOver(true) }}
-        onDragLeave={() => setDragOver(false)}
+        onDragOver={(e) => {
+          if (!isNoteDrag(e)) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+        }}
+        onDragEnter={(e) => {
+          if (!isNoteDrag(e)) return
+          e.preventDefault()
+          if (dragDepth.current++ === 0) {
+            setDragOver(true)
+            // hovering a collapsed folder opens it, so its subfolders become targets
+            if (children.length && !expanded) openTimer.current = setTimeout(() => setOpen(true), 600)
+          }
+        }}
+        onDragLeave={() => {
+          if (--dragDepth.current <= 0) endDrag()
+        }}
         onDrop={(e) => {
           e.preventDefault()
-          setDragOver(false)
+          endDrag()
+          document.body.classList.remove('dragging-note') // the dragged card may unmount before its dragend
           const id = e.dataTransfer.getData('text/notex-note')
           if (id) onDropNote(id, path)
         }}

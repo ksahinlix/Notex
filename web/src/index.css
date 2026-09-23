@@ -284,3 +284,51 @@ mark { background: #fff1a8; color: inherit; border-radius: 2px; padding: 0 1px; 
 }
 .reminder-done:hover { color: #fff; background: var(--ok); border-color: var(--ok); }
 .reminders-sub { font-size: 11px; font-weight: 600; color: var(--reminder); margin: 8px 0 2px; }
+
+/* ---- view tabs (Notlar | Hatırlatmalar) ---- */
+.view-tabs { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 3px; gap: 2px; }
+.view-tabs button {
+  display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; font: inherit; font-size: 13px;
+  font-weight: 500; color: var(--text-muted); padding: 5px 12px; border-radius: 6px; cursor: pointer;
+}
+.view-tabs button.on { background: var(--accent-soft); color: var(--accent); }
+.tab-count { font-size: 10px; background: var(--reminder-soft); color: var(--reminder); border-radius: 999px; padding: 0 6px; }
+@media (max-width: 480px) { .view-tabs button { padding: 5px 8px; } }
+
+/* ---- upcoming strip ---- */
+.strip-all { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 500; color: var(--reminder); }
+
+/* ---- reminders page (agenda) ---- */
+.agenda-group { margin-bottom: 18px; }
+.agenda-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 4px 0 6px; display: inline-flex; align-items: center; gap: 4px; }
+.agenda-title.overdue { color: var(--danger); }
+.agenda-item { display: flex; gap: 12px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; }
+.agenda-item.overdue-item { border-color: #fecdca; background: #fffafa; }
+.agenda-item.done-item { opacity: 0.6; }
+.agenda-item.done-item .agenda-text { text-decoration: line-through; }
+.agenda-date { width: 40px; flex-shrink: 0; text-align: center; display: flex; flex-direction: column; line-height: 1.1; }
+.agenda-day { font-size: 18px; font-weight: 600; color: var(--text); }
+.agenda-wd { font-size: 11px; color: var(--text-muted); }
+.agenda-main { flex: 1; min-width: 0; }
+.agenda-text { font-size: 14px; overflow-wrap: anywhere; }
+.agenda-meta { font-size: 11px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; align-items: center; }
+.agenda-repeat { display: inline-flex; align-items: center; gap: 3px; color: var(--accent); }
+.agenda-cat { font-size: 11px; color: var(--accent); }
+.agenda-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.agenda-done:hover { color: var(--ok); }
+.agenda-picker .reminder-picker { bottom: auto; top: 6px; }
+.picker-repeat { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.picker-repeat select { flex: 1; border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; background: var(--surface); color: var(--text); }
+
+/* ---- drag & drop and "Taşı" ---- */
+.drag-handle { cursor: grab; color: var(--text-muted); padding: 2px 0; margin-left: -4px; display: inline-flex; touch-action: none; }
+.drag-handle:active { cursor: grabbing; }
+.note.dragging { opacity: 0.45; }
+.dragging-note .sidebar { outline: 1.5px dashed var(--accent); outline-offset: 2px; }
+.dragging-note .tree-row:hover { background: var(--accent-soft); }
+.move-menu { position: absolute; z-index: 40; top: 6px; left: 0; width: min(340px, calc(100vw - 32px)); padding: 10px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12); }
+.move-title { font-size: 12px; display: flex; align-items: center; gap: 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.move-list { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; }
+.move-item { text-align: left; border: none; background: none; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 5px; cursor: pointer; color: var(--text); }
+.move-item:hover, .move-item:focus-visible { background: var(--accent-soft); color: var(--accent); }
+.move-item.new { color: var(--ok); }

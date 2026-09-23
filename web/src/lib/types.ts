@@ -32,6 +32,10 @@ export interface Note {
   reminderAt: string | null
   /** A reminder, with a date (reminderAt) or without one. */
   isReminder?: boolean
+  /** Repeating reminder: counted from reminderAt. */
+  repeat?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null
+  /** Repeating reminder: occurrences up to this time are done. */
+  reminderDoneUntil?: string | null
   createdAt: string
   updatedAt: string
   deletedAt?: string | null

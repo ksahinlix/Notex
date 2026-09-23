@@ -90,3 +90,9 @@ CREATE TABLE IF NOT EXISTS ai_usage (
 -- Reminders without a date ("... hatırlat" with no time given). Like
 -- reminder_at it stays in plaintext so the reminders list works while locked.
 ALTER TABLE notes ADD COLUMN IF NOT EXISTS is_reminder BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Repeating reminders: 'daily' | 'weekly' | 'monthly' | 'yearly', counted from
+-- reminder_at (e.g. monthly from the 28th = every 28th). Plaintext, like
+-- reminder_at. reminder_done_until: occurrences up to this time are done.
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS reminder_repeat TEXT;
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS reminder_done_until TIMESTAMPTZ;

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
-import { BookOpen, Check, Clock, ImagePlus, Lock, MessageCircle, Pencil, Sparkles, Trash2, X } from 'lucide-react'
+import { BookOpen, Check, Clock, FolderInput, GripVertical, ImagePlus, Lock, MessageCircle, Pencil, Sparkles, Trash2, X } from 'lucide-react'
 import { formatDate } from '../lib/format'
+import { repeatLabel } from '../lib/recurrence'
 import { fileToDataUrl, imageFilesFrom } from '../lib/images'
 import { newId, nowIso, withImages } from '../lib/notes'
 import { blocksToText } from '../lib/paste'
@@ -8,6 +9,7 @@ import { parsePath } from '../lib/tree'
 import type { Note, NoteContent } from '../lib/types'
 import { confirmDialog } from '../state/confirm'
 import { store } from '../state/store'
+import MoveMenu from './MoveMenu'
 import NoteBody from './NoteBody'
 import ReminderPicker, { type ReminderChoice } from './ReminderPicker'
 import RichEditor, { type RichEditorHandle } from './RichEditor'
@@ -16,6 +18,8 @@ interface Props {
   note: Note
   content: NoteContent | undefined
   pathOptionsId: string
+  /** All folder paths, for the "Taşı" menu. */
+  folderPaths: string[]
   /** Search words to highlight. */
   terms?: string[]
   /** Found by meaning (AI), not by the typed words. */
@@ -29,7 +33,7 @@ interface Props {
 /** More than a minute between creation and the last change counts as an edit. */
 const wasEdited = (n: Note) => Date.parse(n.updatedAt) - Date.parse(n.createdAt) > 60_000
 
-export default function NoteCard({ note, content, pathOptionsId, terms, meaningMatch, onOpenReader, onSelectPath, onImageClick, onUnlock }: Props) {
+export default function NoteCard({ note, content, pathOptionsId, folderPaths, terms, meaningMatch, onOpenReader, onSelectPath, onImageClick, onUnlock }: Props) {
   const [editing, setEditing] = useState(false)
   const [draftPath, setDraftPath] = useState('')
   const [draftReminder, setDraftReminder] = useState<ReminderChoice | null>(null)
@@ -39,6 +43,9 @@ export default function NoteCard({ note, content, pathOptionsId, terms, meaningM
   const [commenting, setCommenting] = useState(false)
   const [comment, setComment] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const cardRef = useRef<HTMLElement>(null)
+  const [moving, setMoving] = useState(false)
+  const [dragging, setDragging] = useState(false)
 
   if (!content) {
     return (
@@ -52,7 +59,9 @@ export default function NoteCard({ note, content, pathOptionsId, terms, meaningM
 
   function startEdit() {
     setDraftPath(note.path.join(' / '))
-    setDraftReminder(note.isReminder || note.reminderAt ? { at: note.reminderAt ? new Date(note.reminderAt) : null } : null)
+    setDraftReminder(
+      note.isReminder || note.reminderAt ? { at: note.reminderAt ? new Date(note.reminderAt) : null, repeat: note.repeat ?? null } : null,
+    )
     setPickerOpen(false)
     setEditing(true)
   }
@@ -71,7 +80,15 @@ export default function NoteCard({ note, content, pathOptionsId, terms, meaningM
     }
     setEditing(false)
     await store.update(
-      { ...note, path, reminderAt: draftReminder?.at ? draftReminder.at.toISOString() : null, isReminder: !!draftReminder },
+      {
+        ...note,
+        path,
+        reminderAt: draftReminder?.at ? draftReminder.at.toISOString() : null,
+        isReminder: !!draftReminder,
+        repeat: draftReminder?.at ? (draftReminder.repeat ?? null) : null,
+        // a new time or rule starts fresh
+        reminderDoneUntil: draftReminder?.at?.toISOString() === note.reminderAt && (draftReminder?.repeat ?? null) === (note.repeat ?? null) ? note.reminderDoneUntil : null,
+      },
       next,
     )
   }
@@ -102,15 +119,29 @@ export default function NoteCard({ note, content, pathOptionsId, terms, meaningM
   }
 
   return (
-    <article
-      className="note"
-      draggable={!editing}
-      onDragStart={(e) => {
-        e.dataTransfer.setData('text/notex-note', note.id)
-        e.dataTransfer.effectAllowed = 'move'
-      }}
-    >
+    <article ref={cardRef} className={`note ${dragging ? 'dragging' : ''}`}>
       <div className="note-row">
+        {!editing && (
+          // Only this handle drags (the rest of the card stays selectable text).
+          <span
+            className="drag-handle hover-only"
+            draggable
+            title="Sürükleyip soldaki bir klasöre bırak"
+            onDragStart={(e) => {
+              e.dataTransfer.setData('text/notex-note', note.id)
+              e.dataTransfer.effectAllowed = 'move'
+              if (cardRef.current) e.dataTransfer.setDragImage(cardRef.current, 16, 16)
+              document.body.classList.add('dragging-note')
+              setDragging(true)
+            }}
+            onDragEnd={() => {
+              document.body.classList.remove('dragging-note')
+              setDragging(false)
+            }}
+          >
+            <GripVertical size={14} />
+          </span>
+        )}
         {note.isListItem && (
           <button className={`checkbox ${note.checked ? 'on' : ''}`} onClick={() => store.setChecked(note, !note.checked)} aria-label="İşaretle">
             {note.checked && <Check size={11} color="#fff" />}
@@ -149,7 +180,14 @@ export default function NoteCard({ note, content, pathOptionsId, terms, meaningM
                 <div className="reminder-chip">
                   <Clock size={12} />
                   <button className="link" title="Zamanı değiştir" onClick={() => setPickerOpen(true)}>
-                    Hatırlatma: <b>{draftReminder.at ? formatDate(draftReminder.at.toISOString()) : 'tarihsiz'}</b>
+                    Hatırlatma:{' '}
+                    <b>
+                      {draftReminder.at && draftReminder.repeat
+                        ? repeatLabel(draftReminder.at, draftReminder.repeat)
+                        : draftReminder.at
+                          ? formatDate(draftReminder.at.toISOString())
+                          : 'tarihsiz'}
+                    </b>
                   </button>
                   <button className="icon-btn" title="Hatırlatmayı kaldır" onClick={() => setDraftReminder(null)}><X size={12} /></button>
                 </div>
@@ -158,6 +196,7 @@ export default function NoteCard({ note, content, pathOptionsId, terms, meaningM
                 <div className="picker-anchor">
                   <ReminderPicker
                     value={draftReminder?.at ?? null}
+                    repeat={draftReminder?.repeat ?? null}
                     onPick={(choice) => {
                       setDraftReminder(choice)
                       setPickerOpen(false)
@@ -178,7 +217,9 @@ export default function NoteCard({ note, content, pathOptionsId, terms, meaningM
           <div className="note-meta">
             {formatDate(note.createdAt)}
             {wasEdited(note) && <span title={`Son düzenleme: ${formatDate(note.updatedAt)}`}>· düzenlendi {formatDate(note.updatedAt)}</span>}
-            {note.reminderAt ? (
+            {note.reminderAt && note.repeat ? (
+              <span className="c-reminder"><Clock size={10} /> {repeatLabel(new Date(note.reminderAt), note.repeat)}</span>
+            ) : note.reminderAt ? (
               <span className="c-reminder"><Clock size={10} /> {formatDate(note.reminderAt)}</span>
             ) : note.isReminder ? (
               <span className="c-reminder"><Clock size={10} /> hatırlatma</span>
@@ -205,6 +246,20 @@ export default function NoteCard({ note, content, pathOptionsId, terms, meaningM
             </div>
           )}
 
+          {moving && (
+            <div className="picker-anchor">
+              <MoveMenu
+                current={note.path}
+                paths={folderPaths}
+                onMove={(path) => {
+                  setMoving(false)
+                  void store.move(note, path)
+                }}
+                onClose={() => setMoving(false)}
+              />
+            </div>
+          )}
+
           {commenting && (
             <div className="edit-row">
               <input
@@ -226,6 +281,7 @@ export default function NoteCard({ note, content, pathOptionsId, terms, meaningM
           <div className="note-actions">
             <button className="icon-btn hover-only" title="Okuma modu" onClick={onOpenReader}><BookOpen size={14} /></button>
             <button className="icon-btn hover-only" title="Düzenle" onClick={startEdit}><Pencil size={14} /></button>
+            <button className="icon-btn hover-only" title="Taşı" onClick={() => setMoving((v) => !v)}><FolderInput size={14} /></button>
             <button className="icon-btn hover-only" title="Yorum ekle" onClick={() => setCommenting((v) => !v)}><MessageCircle size={14} /></button>
             <button className="icon-btn hover-only" title="Görsel ekle" onClick={() => fileRef.current?.click()}><ImagePlus size={14} /></button>
             <button className="icon-btn hover-only danger" title="Sil" onClick={() => void askDelete()}><Trash2 size={14} /></button>

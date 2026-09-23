@@ -181,3 +181,16 @@ test("reminders with and without a date", async () => {
   assert.equal(none.body.isReminder, false);
   assert.equal((await api("PUT", "/api/notes/r4", note("r4", { isReminder: "yes" }))).status, 400);
 });
+
+test("repeating reminders", async () => {
+  const api = client();
+  await api.login("repeat@example.com");
+  const monthly = note("m1", { reminderAt: "2026-09-28T06:00:00.000Z", repeat: "monthly", reminderDoneUntil: "2026-09-28T06:00:00.000Z" });
+  const r = await api("PUT", "/api/notes/m1", monthly);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.repeat, "monthly");
+  assert.equal(r.body.reminderDoneUntil, "2026-09-28T06:00:00.000Z");
+  assert.equal((await api("PUT", "/api/notes/m2", note("m2", { repeat: "hourly", reminderAt: "2026-09-28T06:00:00.000Z" }))).status, 400);
+  assert.equal((await api("PUT", "/api/notes/m3", note("m3", { repeat: "weekly" }))).status, 400); // needs a date
+  assert.equal((await api("PUT", "/api/notes/m4", note("m4"))).body.repeat, null);
+});

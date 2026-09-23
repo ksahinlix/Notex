@@ -7,7 +7,11 @@
 // Rule-based on purpose: it is instant, works without AI, and date math is
 // exactly what small language models get wrong.
 
+import type { Repeat } from './recurrence'
+
 export interface ParsedReminder {
+  /** Set for repeating reminders ("her ayın 28'i"); date is then the next occurrence. */
+  repeat?: Repeat
   /** null: a reminder without a date ("... hatırlat", "unutma"). */
   date: Date | null
   /** The recognized parts of the text, e.g. "yarın 15:00" or "hatırlat". */
@@ -97,10 +101,65 @@ const KEYWORD = re(`${B}(hatırlat\\p{L}*|anımsat\\p{L}*|unutma\\p{L}*|remind\\
  * an undated reminder if the text asks for one ("hatırlat"), otherwise null.
  */
 export function parseReminder(text: string, now: Date = new Date()): ParsedReminder | null {
+  const repeating = parseRepeat(text, now)
+  if (repeating) return repeating
   const dated = parseDate(text, now)
   if (dated) return dated
   const k = find(KEYWORD, text.toLocaleLowerCase('tr'))
   return k ? { date: null, matched: text.slice(k.index, k.index + k.text.length) } : null
+}
+
+// "her ayın 28'i", "her ay 15'inde", "aylık"; "her pazartesi", "her hafta",
+// "haftalık"; "her gün", "her sabah", "günlük"; "her yıl 5 Mart", "yıllık".
+const REPEAT_WORD = re(
+  `${B}(?:her\\s+(ayın|ay|hafta|gün|sabah|akşam|gece|yıl|sene|pazartesi|salı|çarşamba|perşembe|cumartesi|cuma|pazar)\\p{L}*|(aylık|haftalık|günlük|yıllık))${E}`,
+)
+// 30/31 first, and no digit may follow: otherwise "31'i" would match as "3".
+const MONTH_DAY = re(`${B}her\\s+ay(?:ın)?\\s+(3[01]|[0-2]?\\d)(?!\\d)(?:'\\p{L}*|\\.)?(?:\\s+günü?\\p{L}*)?`)
+
+/** A repeating reminder: its rule and next occurrence, or null. */
+function parseRepeat(text: string, now: Date): ParsedReminder | null {
+  const s = text.toLocaleLowerCase('tr')
+  const w = find(REPEAT_WORD, s)
+  if (!w) return null
+  const word = w[1] ?? w[2]
+  const t = parseTime(s)
+  const hits: Hit[] = [w]
+  if (t) hits.push(t.hit)
+  const at = (d: Date) => atTime(d, t?.h ?? DEFAULT_HOUR, t?.m ?? 0)
+
+  if (word === 'ayın' || word === 'ay' || word === 'aylık') {
+    const dm = find(MONTH_DAY, s) // "28'i", "15'inde", "3."
+    if (dm) hits.push(dm)
+    const day = dm ? Number(dm[1]) : now.getDate()
+    // First date: the next month that really has this day, so "her ayın 31'i"
+    // keeps the 31st (shorter months then use their last day, see recurrence.ts).
+    for (let i = 0; i < 14; i++) {
+      const y = now.getFullYear() + Math.floor((now.getMonth() + i) / 12)
+      const m = (now.getMonth() + i) % 12
+      if (day > new Date(y, m + 1, 0).getDate()) continue
+      const date = at(new Date(y, m, day))
+      if (date > now) return { date, repeat: 'monthly', matched: joinHits(text, hits) }
+    }
+    return null
+  }
+  if (word === 'yıl' || word === 'sene' || word === 'yıllık') {
+    const d = parseDate(text, now) // "5 mart" -> next 5 March
+    let date = d?.date ?? at(now)
+    if (!d && date <= now) date = new Date(date.getFullYear() + 1, date.getMonth(), date.getDate(), date.getHours(), date.getMinutes())
+    return { date, repeat: 'yearly', matched: d ? d.matched : joinHits(text, hits) }
+  }
+  if (word === 'hafta' || word === 'haftalık' || WEEKDAYS[word] !== undefined) {
+    const d = parseDate(text, now) // a weekday in the text -> its next date
+    let date = d?.date ?? at(now)
+    if (!d && date <= now) date = addDays(date, 7)
+    return { date, repeat: 'weekly', matched: d ? d.matched : joinHits(text, hits) }
+  }
+  // her gün / sabah / akşam / gece, günlük
+  const hour = word === 'akşam' ? 19 : word === 'gece' ? 22 : DEFAULT_HOUR
+  let date = t ? atTime(now, t.h, t.m) : atTime(now, hour, 0)
+  if (date <= now) date = addDays(date, 1)
+  return { date, repeat: 'daily', matched: joinHits(text, hits) }
 }
 
 function parseDate(text: string, now: Date): { date: Date; matched: string } | null {

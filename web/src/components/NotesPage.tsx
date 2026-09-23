@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, LogOut, Search, Sparkles, X } from 'lucide-react'
+import { AlarmClock, Loader2, LogOut, NotebookPen, Search, Sparkles, X } from 'lucide-react'
 import { clearSearchCache, useSemanticSearch } from '../ai/useAi'
+import { isReminderNote } from '../lib/agenda'
 import { queryTerms } from '../lib/highlight'
 import { matchesQuery } from '../lib/notes'
 import { allPaths, buildTree, findProtectedAncestor, pathKeyOf, pathStartsWith } from '../lib/tree'
@@ -13,16 +14,26 @@ import Lightbox from './Lightbox'
 import NoteCard from './NoteCard'
 import PasswordModal from './PasswordModal'
 import Reader from './Reader'
-import Reminders from './Reminders'
+import RemindersPage from './RemindersPage'
+import UpcomingStrip from './UpcomingStrip'
 import Sidebar from './Sidebar'
 
 const PATH_OPTIONS_ID = 'notex-paths'
+
+type View = 'notes' | 'reminders'
+const viewFromHash = (): View => (location.hash === '#hatirlatmalar' ? 'reminders' : 'notes')
 
 export default function NotesPage({ user, onLogout }: { user: User; onLogout: () => void }) {
   const state = useNotex()
   const [selectedPath, setSelectedPath] = useState<string[] | null>(null)
   const [query, setQuery] = useState('')
-  const [readerId, setReaderId] = useState<string | null>(null)
+  // Reader: the open note and the list ← → moves through.
+  const [reader, setReader] = useState<{ id: string; list: string[] } | null>(null)
+  const [view, setViewState] = useState<View>(viewFromHash)
+  const setView = (v: View) => {
+    setViewState(v)
+    history.replaceState(null, '', v === 'reminders' ? '#hatirlatmalar' : location.pathname)
+  }
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [treeError, setTreeError] = useState('')
 
@@ -30,7 +41,10 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
     void store.load()
   }, [])
 
-  const tree = useMemo(() => buildTree(state.notes), [state.notes])
+  // Reminders live on their own page, not in the notes tree or list.
+  const plainNotes = useMemo(() => state.notes.filter((n) => !isReminderNote(n)), [state.notes])
+  const reminderCount = state.notes.length - plainNotes.length
+  const tree = useMemo(() => buildTree(plainNotes), [plainNotes])
   const paths = useMemo(() => allPaths(tree).map((p) => p.join(' / ')), [tree])
   const contentOf = (n: Note) => store.contentOf(n)
 
@@ -38,8 +52,8 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
   useEffect(clearSearchCache, [state.notes])
 
   const scoped = useMemo(
-    () => (selectedPath ? state.notes.filter((n) => pathStartsWith(n.path, selectedPath)) : state.notes),
-    [state.notes, selectedPath],
+    () => (selectedPath ? plainNotes.filter((n) => pathStartsWith(n.path, selectedPath)) : plainNotes),
+    [plainNotes, selectedPath],
   )
   // Search covers ALL notes (not just the selected folder): notes containing
   // the words first, then notes the AI found by meaning (D15). Locked notes
@@ -58,9 +72,10 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
   const meaningHits = (semantic.ids ?? []).flatMap((id) => (keywordIds.has(id) ? [] : (byId.get(id) ?? [])))
   const meaningIds = new Set(meaningHits.map((n) => n.id))
   const visible = !searching ? scoped : [...keywordHits, ...meaningHits]
-  const readerIndex = readerId ? visible.findIndex((n) => n.id === readerId) : -1
-  const readerNote = readerIndex >= 0 ? visible[readerIndex] : null
+  const readerIndex = reader ? reader.list.indexOf(reader.id) : -1
+  const readerNote = reader ? (byId.get(reader.id) ?? null) : null
   const readerContent = readerNote ? contentOf(readerNote) : undefined
+  const openReader = (id: string, list: string[]) => setReader({ id, list })
 
   async function onLockClick(path: string[]) {
     setTreeError('')
@@ -92,10 +107,10 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
           content={readerContent}
           terms={terms}
           hasPrev={readerIndex > 0}
-          hasNext={readerIndex < visible.length - 1}
-          onPrev={() => setReaderId(visible[readerIndex - 1].id)}
-          onNext={() => setReaderId(visible[readerIndex + 1].id)}
-          onClose={() => setReaderId(null)}
+          hasNext={readerIndex >= 0 && readerIndex < reader!.list.length - 1}
+          onPrev={() => setReader({ ...reader!, id: reader!.list[readerIndex - 1] })}
+          onNext={() => setReader({ ...reader!, id: reader!.list[readerIndex + 1] })}
+          onClose={() => setReader(null)}
           onImageClick={setLightbox}
         />
       )}
@@ -105,7 +120,14 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
 
       <main className="page">
         <header className="topbar">
-          <strong>Notlar</strong>
+          <nav className="view-tabs" aria-label="Görünüm">
+            <button className={view === 'notes' ? 'on' : ''} onClick={() => setView('notes')}>
+              <NotebookPen size={14} /> Notlar
+            </button>
+            <button className={view === 'reminders' ? 'on' : ''} onClick={() => setView('reminders')}>
+              <AlarmClock size={14} /> Hatırlatmalar {reminderCount > 0 && <span className="tab-count">{reminderCount}</span>}
+            </button>
+          </nav>
           <div className="topbar-actions">
             <span className="user-chip" title={user.email}>
               {user.picture ? <img src={user.picture} alt="" referrerPolicy="no-referrer" /> : <span className="user-initial">{(user.name || user.email)[0].toLocaleUpperCase('tr')}</span>}
@@ -122,7 +144,11 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
           </div>
         )}
 
-        <Reminders notes={state.notes} contentOf={contentOf} />
+        {view === 'reminders' ? (
+          <RemindersPage notes={state.notes} contentOf={contentOf} onOpenReader={openReader} />
+        ) : (
+          <>
+        <UpcomingStrip notes={state.notes} contentOf={contentOf} onShowAll={() => setView('reminders')} />
 
         <div className="search">
           <Search size={14} className="search-icon" />
@@ -173,9 +199,10 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
                   note={n}
                   content={contentOf(n)}
                   pathOptionsId={PATH_OPTIONS_ID}
+                  folderPaths={paths}
                   terms={searching ? terms : undefined}
                   meaningMatch={meaningIds.has(n.id)}
-                  onOpenReader={() => setReaderId(n.id)}
+                  onOpenReader={() => openReader(n.id, visible.map((x) => x.id))}
                   onSelectPath={setSelectedPath}
                   onImageClick={setLightbox}
                   onUnlock={() => unlockNote(n)}
@@ -184,6 +211,8 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
             )}
           </section>
         </div>
+          </>
+        )}
       </main>
 
       <Composer selectedPath={selectedPath} pathOptionsId={PATH_OPTIONS_ID} />

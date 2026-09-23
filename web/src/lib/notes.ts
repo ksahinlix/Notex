@@ -13,7 +13,10 @@ export function newId(): string {
 }
 
 /** A new note shell. Call `seal` to attach its content. */
-export function newNote(path: string[], meta: { isListItem?: boolean; reminderAt?: string | null; isReminder?: boolean } = {}): Note {
+export function newNote(
+  path: string[],
+  meta: { isListItem?: boolean; reminderAt?: string | null; isReminder?: boolean; repeat?: Note['repeat'] } = {},
+): Note {
   const now = nowIso()
   return {
     id: newId(),
@@ -25,6 +28,8 @@ export function newNote(path: string[], meta: { isListItem?: boolean; reminderAt
     checked: false,
     reminderAt: meta.reminderAt ?? null,
     isReminder: !!meta.isReminder || !!meta.reminderAt,
+    repeat: meta.reminderAt ? (meta.repeat ?? null) : null,
+    reminderDoneUntil: null,
     createdAt: now,
     updatedAt: now,
   }

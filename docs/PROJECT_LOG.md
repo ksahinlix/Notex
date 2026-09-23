@@ -765,3 +765,54 @@ when editing.
   undated reminder saved and listed, picker (no year, 1 hour default, preset,
   custom time saved), ✓ done, edit without a date field and "düzenlendi",
   delete preview intact, phone width.
+
+### 2026-09-24 — Repeating reminders, a Reminders page, better moving of notes
+**Owner requests:** repeating reminders ("Kredi kartı ekstresi her ayın 28'i"),
+the next 6 months of reminders, reminders on their own page with their own
+categories (not in the notes tree), and drag & drop "not working well".
+
+**What we did:**
+- **Repeating reminders:**
+  - New columns \`notes.reminder_repeat\` (daily/weekly/monthly/yearly,
+    counted from \`reminder_at\`) and \`notes.reminder_done_until\`.
+  - The parser understands "her ayın 28'i", "her ay 15'inde", "aylık",
+    "her pazartesi", "haftalık", "her gün / sabah / akşam", and "her yıl
+    5 Mart".
+  - \`lib/recurrence.ts\`: month ends use the last day ("her ayın 31'i" → 30th
+    or 28th), and 29 February becomes 28 February in other years.
+  - The picker gets a "Tekrar" choice.
+- **Reminders page** (\`RemindersPage.tsx\`, tabs "Notlar | Hatırlatmalar",
+  \`#hatirlatmalar\` in the URL):
+  - Categories on the left. The agenda (\`lib/agenda.ts\`) has Gecikmiş, the
+    next 6 months by month, Tarihsiz, and Tamamlananlar.
+  - Monthly and yearly reminders show every occurrence, weekly ones 4 weeks,
+    daily ones only the next.
+  - ✓ on a repeating reminder completes only that occurrence.
+  - Reminders are no longer in the notes tree or list (search still finds
+    them). The notes page shows a small "Yaklaşan" strip with a link.
+- **Moving notes:**
+  - The problems:
+    1. The whole card was draggable, so text couldn't be selected.
+    2. The drop highlight flickered, because dragleave fires over a row's
+       children.
+    3. Collapsed subfolders couldn't be targets.
+    4. Touch screens don't support HTML5 drag & drop.
+  - The fixes:
+    1. A grip handle is the only thing that drags.
+    2. Drag enter/leave are counted, so the highlight doesn't flicker.
+    3. Hovering 0.6 s opens a collapsed folder.
+    4. A new "Taşı" menu (filterable folder list, or type a new path) works
+       everywhere.
+
+**How verified:**
+- Server: 22 tests (new: repeat validation).
+- Web: 90 tests (new: recurrence 7, repeat phrases 11, agenda 5), plus
+  typecheck, lint and build.
+- Browser test (mocked API), 24 checks:
+  - Reminders are not in the tree; "her ayın 28'i" is saved as monthly and
+    shown 6 times; ✓ skips one occurrence; the category filter works;
+    switching to weekly shows 4 weeks; the page survives a reload.
+  - Text in cards is selectable; dragging by the handle opens a collapsed
+    folder and drops into it; the drag state is cleared.
+  - "Taşı" works both with a new path and with a picked folder.
+  - Phone width works.

@@ -13,6 +13,8 @@ export function toApi(row) {
     reminderAt: row.reminder_at?.toISOString() ?? null,
     // A reminder with or without a date (reminderAt null = "undated").
     isReminder: row.is_reminder || !!row.reminder_at,
+    repeat: row.reminder_repeat ?? null,
+    reminderDoneUntil: row.reminder_done_until?.toISOString() ?? null,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
     deletedAt: row.deleted_at?.toISOString() ?? null,
@@ -20,6 +22,7 @@ export function toApi(row) {
 }
 
 const isIso = (v) => typeof v === "string" && !Number.isNaN(Date.parse(v));
+export const REPEATS = ["daily", "weekly", "monthly", "yearly"];
 
 // Returns an error message, or null if the note body is valid.
 export function validateNote(body) {
@@ -32,6 +35,9 @@ export function validateNote(body) {
   if (!encrypted && (typeof content !== "object" || content === null || cipher != null)) return "plain notes need content and no cipher";
   if (reminderAt != null && !isIso(reminderAt)) return "reminderAt must be an ISO date or null";
   if (body.isReminder !== undefined && typeof body.isReminder !== "boolean") return "isReminder must be a boolean";
+  if (body.repeat != null && !REPEATS.includes(body.repeat)) return "repeat must be one of " + REPEATS.join(", ");
+  if (body.repeat != null && body.reminderAt == null) return "a repeating reminder needs reminderAt";
+  if (body.reminderDoneUntil != null && !isIso(body.reminderDoneUntil)) return "reminderDoneUntil must be an ISO date or null";
   if (!isIso(createdAt) || !isIso(updatedAt)) return "createdAt and updatedAt must be ISO dates";
   return null;
 }
@@ -70,17 +76,20 @@ export function notesRouter(pool) {
       return res.status(413).json({ error: "storage quota exceeded" });
 
     const { rows } = await pool.query(
-      `INSERT INTO notes (id, user_id, path, encrypted, content, cipher, is_list_item, checked, reminder_at, created_at, updated_at, is_reminder, deleted_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NULL)
+      `INSERT INTO notes (id, user_id, path, encrypted, content, cipher, is_list_item, checked, reminder_at, created_at, updated_at, is_reminder,
+                          reminder_repeat, reminder_done_until, deleted_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULL)
        ON CONFLICT (id) DO UPDATE SET
          path = EXCLUDED.path, encrypted = EXCLUDED.encrypted, content = EXCLUDED.content, cipher = EXCLUDED.cipher,
          is_list_item = EXCLUDED.is_list_item, checked = EXCLUDED.checked, reminder_at = EXCLUDED.reminder_at,
-         updated_at = EXCLUDED.updated_at, is_reminder = EXCLUDED.is_reminder, deleted_at = NULL
+         updated_at = EXCLUDED.updated_at, is_reminder = EXCLUDED.is_reminder,
+         reminder_repeat = EXCLUDED.reminder_repeat, reminder_done_until = EXCLUDED.reminder_done_until, deleted_at = NULL
        -- only the owner can overwrite a note, and only with a newer version
        WHERE notes.user_id = EXCLUDED.user_id AND notes.updated_at <= EXCLUDED.updated_at
        RETURNING *`,
       [req.params.id, req.userId, n.path, n.encrypted, n.encrypted ? null : n.content, n.encrypted ? n.cipher : null,
-        !!n.isListItem, !!n.checked, n.reminderAt ?? null, n.createdAt, n.updatedAt, !!n.isReminder || !!n.reminderAt],
+        !!n.isListItem, !!n.checked, n.reminderAt ?? null, n.createdAt, n.updatedAt, !!n.isReminder || !!n.reminderAt,
+        n.repeat ?? null, n.reminderDoneUntil ?? null],
     );
     if (rows.length) return res.json(toApi(rows[0]));
     const current = await pool.query("SELECT * FROM notes WHERE id = $1", [req.params.id]);
