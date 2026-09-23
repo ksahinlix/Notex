@@ -14,8 +14,8 @@ function readAsDataUrl(file: Blob): Promise<string> {
   })
 }
 
-/** File -> data URL, downscaled to at most 1600px and re-encoded as JPEG (PNG/GIF kept if small). */
-export async function fileToDataUrl(file: File): Promise<string> {
+/** File/Blob -> data URL, downscaled to at most 1600px and re-encoded as JPEG (PNG/GIF kept if small). */
+export async function fileToDataUrl(file: Blob): Promise<string> {
   const original = await readAsDataUrl(file)
   if (file.type === 'image/gif' || file.type === 'image/svg+xml') return original
   const img = new Image()
@@ -31,6 +31,33 @@ export async function fileToDataUrl(file: File): Promise<string> {
   ctx.fillRect(0, 0, canvas.width, canvas.height)
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
   return canvas.toDataURL('image/jpeg', JPEG_QUALITY)
+}
+
+/**
+ * Makes any image source storable: a data URL is shrunk, a web URL is fetched
+ * (directly if the site allows it, otherwise through our server's
+ * /api/image-proxy) and shrunk. Returns null if the image can't be loaded.
+ */
+export async function resolveImageSrc(src: string): Promise<string | null> {
+  try {
+    if (src.startsWith('data:')) return await fileToDataUrl(await (await fetch(src)).blob())
+    if (!/^https?:\/\//i.test(src)) return null
+    let blob: Blob | null = null
+    try {
+      const direct = await fetch(src, { mode: 'cors', credentials: 'omit' })
+      if (direct.ok) blob = await direct.blob()
+    } catch {
+      /* blocked by CORS: use the proxy */
+    }
+    if (!blob || !blob.type.startsWith('image/')) {
+      const proxied = await fetch(`/api/image-proxy?url=${encodeURIComponent(src)}`, { credentials: 'same-origin' })
+      if (!proxied.ok) return null
+      blob = await proxied.blob()
+    }
+    return blob.type.startsWith('image/') ? await fileToDataUrl(blob) : null
+  } catch {
+    return null
+  }
 }
 
 export function imageFilesFrom(list: FileList | DataTransferItemList | null | undefined): File[] {

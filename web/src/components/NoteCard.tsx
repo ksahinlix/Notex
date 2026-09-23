@@ -2,10 +2,12 @@ import { useRef, useState } from 'react'
 import { Check, Clock, ImagePlus, Lock, Maximize2, MessageCircle, Minimize2, Pencil, Trash2, X } from 'lucide-react'
 import { formatDate, fromLocalInput, toLocalInput } from '../lib/format'
 import { fileToDataUrl, imageFilesFrom } from '../lib/images'
-import { newId, nowIso, withImages, withText } from '../lib/notes'
+import { newId, nowIso, withImages } from '../lib/notes'
+import { blocksToText } from '../lib/paste'
 import { parsePath } from '../lib/tree'
 import type { Note, NoteContent } from '../lib/types'
 import { store } from '../state/store'
+import RichEditor, { type RichEditorHandle } from './RichEditor'
 
 interface Props {
   note: Note
@@ -20,7 +22,9 @@ interface Props {
 
 export default function NoteCard({ note, content, expanded, pathOptionsId, onToggleExpand, onSelectPath, onImageClick, onUnlock }: Props) {
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState({ text: '', path: '', reminder: '' })
+  const [draft, setDraft] = useState({ path: '', reminder: '' })
+  const [imagesLoading, setImagesLoading] = useState(false)
+  const editorRef = useRef<RichEditorHandle>(null)
   const [commenting, setCommenting] = useState(false)
   const [comment, setComment] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -36,15 +40,16 @@ export default function NoteCard({ note, content, expanded, pathOptionsId, onTog
   const c = content
 
   function startEdit() {
-    setDraft({ text: note.isListItem ? c.listItemText || c.text : c.text, path: note.path.join(' / '), reminder: toLocalInput(note.reminderAt) })
+    setDraft({ path: note.path.join(' / '), reminder: toLocalInput(note.reminderAt) })
     setEditing(true)
   }
 
   async function saveEdit() {
-    const text = draft.text.trim()
+    const blocks = editorRef.current?.getBlocks() ?? []
+    const text = blocksToText(blocks)
     const path = parsePath(draft.path)
-    if (!text || !path.length) return
-    const next = note.isListItem ? { ...withText(c, text), listItemText: text } : withText(c, text)
+    if ((!text && !blocks.length) || !path.length || imagesLoading) return
+    const next = { ...c, text, blocks, listItemText: note.isListItem ? text : c.listItemText }
     const reminderAt = fromLocalInput(draft.reminder)
     if (reminderAt && !next.reminderLabel) next.reminderLabel = text.split('\n')[0].slice(0, 80)
     setEditing(false)
@@ -90,13 +95,20 @@ export default function NoteCard({ note, content, expanded, pathOptionsId, onTog
 
           {editing ? (
             <div className="edit">
-              <textarea autoFocus value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} rows={5} />
+              <RichEditor
+                ref={editorRef}
+                autoFocus
+                className="edit-editor"
+                initialBlocks={note.isListItem ? [{ type: 'text', content: c.listItemText || c.text }] : c.blocks?.length ? c.blocks : [{ type: 'text', content: c.text }]}
+                onSubmit={() => void saveEdit()}
+                onBusyChange={setImagesLoading}
+              />
               <div className="edit-row">
                 <input list={pathOptionsId} value={draft.path} onChange={(e) => setDraft({ ...draft, path: e.target.value })} placeholder="Kategori / Klasör / Sayfa" />
                 <input type="datetime-local" value={draft.reminder} onChange={(e) => setDraft({ ...draft, reminder: e.target.value })} title="Hatırlatma" />
               </div>
               <div className="edit-row">
-                <button className="btn btn-primary" onClick={saveEdit}>Kaydet</button>
+                <button className="btn btn-primary" onClick={saveEdit} disabled={imagesLoading}>Kaydet</button>
                 <button className="btn btn-ghost" onClick={() => setEditing(false)}>Vazgeç</button>
               </div>
             </div>

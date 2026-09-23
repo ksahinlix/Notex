@@ -6,6 +6,7 @@
 // recomputed on every visit. Vectors of encrypted notes are never written to
 // disk: they reveal what a note is about (D3 privacy note).
 
+import { llm } from './llm'
 import type { WorkerRequest, WorkerResponse } from './protocol'
 
 export const MODEL_ID = 'Xenova/multilingual-e5-small'
@@ -47,8 +48,10 @@ class AiEngine {
     if (readSetting()) this.enable()
   }
 
+  /** Turns on both models: embeddings (search, suggestions) and the category model (D13). */
   enable() {
     writeSetting(true)
+    void llm.enable()
     if (this.status.state === 'loading' || this.status.state === 'ready') return
     this.setStatus({ state: 'loading', progress: 0, error: '' })
     this.worker ??= this.createWorker()
@@ -57,6 +60,7 @@ class AiEngine {
 
   disable() {
     writeSetting(false)
+    llm.disable()
     this.worker?.terminate()
     this.worker = null
     for (const p of this.pending.values()) p.reject(new Error('AI kapatıldı'))
