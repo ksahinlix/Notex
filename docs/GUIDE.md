@@ -479,7 +479,8 @@ Browser: Google button → ID token ──POST /api/auth/google──▶ Server:
 | **Clipboard / DataTransfer** | `RichEditor.tsx`, `paste.ts` | reading pasted HTML and images |
 | **HTML5 drag & drop** | `NoteCard.tsx`, `Sidebar.tsx` | moving notes and folders |
 | **Canvas** | `lib/images.ts` | shrinking images before saving |
-| **localStorage** | reader text size, "tour done" | small per-browser preferences |
+| **localStorage** | reader text size, "tour done", theme | small per-browser preferences |
+| **CSS variables + `prefers-color-scheme`** | `index.css`, `lib/theme.ts` | dark mode that follows the device or the user's choice |
 | **URL hash** | `#hatirlatmalar` | the Reminders page survives reload |
 
 ---
@@ -544,6 +545,7 @@ Notex/
         │   ├── highlight.ts     search-word highlighting
         │   ├── format.ts        date formatting
         │   ├── google.ts        loads Google's sign-in script
+        │   ├── theme.ts         Sistem/Açık/Koyu: save, load, apply
         │   └── tour.ts          guided tour steps
         ├── state/           app-wide state
         │   ├── store.ts         notes, folders, keys; create/update/move/lock; retries
@@ -563,12 +565,13 @@ Notex/
             ├── ReminderPicker.tsx time/repeat popover
             ├── Reader.tsx       full-screen reading mode
             ├── Tour.tsx         guided tour
+            ├── ThemeToggle.tsx  header button that switches the theme
             ├── PasswordModal.tsx, ConfirmDialog.tsx, ToastHost.tsx, Lightbox.tsx
 ```
 
 **A pattern worth copying:** logic lives in `lib/` as small **pure
 functions** (input → output, no screen, no network). Components stay thin.
-That's why most of the 106 web tests don't need a browser.
+That's why most of the 111 web tests don't need a browser.
 
 ---
 
@@ -852,6 +855,18 @@ pill fills 180 rows), Tarihsiz, Tamamlananlar.
 - **Guided tour** (`Tour.tsx`, `lib/tour.ts`): dims the page, highlights
   elements marked `data-tour="…"`, skips steps whose element isn't on screen,
   opens on first visit (per browser) and from **?**.
+- **Dark mode** (`index.css`, `lib/theme.ts`, `ThemeToggle.tsx`; see D17):
+  - Every color is a CSS variable at the top of `index.css`. The dark theme
+    is a second set of values for the same variables, so components never
+    mention themes.
+  - The CSS picks dark when the device is dark (`prefers-color-scheme`)
+    unless `<html data-theme="light">`, or when `data-theme="dark"`.
+  - The header button cycles Sistem → Açık → Koyu, sets `data-theme`, and
+    saves the choice in localStorage (`notex-theme`; Sistem removes it).
+  - A few lines of plain script in `index.html` apply the saved choice
+    before React loads, so a dark page doesn't flash white on load.
+  - Adding UI: never write a literal color like `#fff`. Use a variable, or
+    add one with a light value and a dark value.
 - **Dialogs and toasts** (`state/confirm.ts`, `state/toast.ts`): a tiny store
   + one host component each; any code can `await confirmDialog({...})` or
   `showToast({...})`.
@@ -882,7 +897,7 @@ pill fills 180 rows), Tarihsiz, Tamamlananlar.
 
 | Layer | Tool | Command | What it covers |
 |---|---|---|---|
-| Web logic | Vitest | `cd web && npm test` | 106 tests: parser, recurrence, agenda, move rules, crypto, tree, paste, store (incl. folder moves with real encryption) |
+| Web logic | Vitest | `cd web && npm test` | 111 tests: parser, recurrence, agenda, move rules, crypto, tree, paste, theme, store (incl. folder moves with real encryption) |
 | Web types & style | tsc, oxlint | `npm run build`, `npm run lint` | type errors, suspicious code |
 | Server API | node:test + embedded-postgres | `cd server && npm test` | 22 tests: login, isolation between users, sync/409, quotas, reminders, AI with a fake model, image proxy |
 | The real app | Playwright (scratch scripts) | — | clicked through each feature in Chrome, desktop + phone width |

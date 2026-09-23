@@ -148,7 +148,7 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
         )}
         {note.isListItem && (
           <button className={`checkbox ${note.checked ? 'on' : ''}`} onClick={() => store.setChecked(note, !note.checked)} aria-label="İşaretle">
-            {note.checked && <Check size={11} color="#fff" />}
+            {note.checked && <Check size={11} color="var(--on-ok)" />}
           </button>
         )}
         <div className="note-main">

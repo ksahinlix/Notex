@@ -1,4 +1,5 @@
-/* Colors come from the prototype (docs/prototype.jsx). */
+/* Colors come from the prototype (docs/prototype.jsx). Every color is a
+   variable, so the dark theme below only swaps values. */
 :root {
   --bg: #f7f7f8;
   --surface: #ffffff;
@@ -12,11 +13,87 @@
   --danger: #b42318;
   --ok: #15803d;
   --ok-soft: #edfbf2;
+  /* text on filled buttons/badges */
+  --on-primary: #ffffff;
+  --on-danger: #ffffff;
+  --on-ok: #ffffff;
+  --danger-soft: #fef3f2;
+  --danger-border: #fecdca;
+  --mark: #fff1a8;
+  --overlay: rgba(24, 24, 27, 0.4);
+  --lightbox-bg: rgba(240, 240, 242, 0.92);
+  --page-veil: rgba(247, 247, 248, 0.97);
+  --reader-bg: #f3f2ef;
+  --reader-bar: rgba(255, 255, 255, 0.85);
+  --toast-bg: #18181b;
+  --tour-dim: rgba(15, 15, 20, 0.55);
+  color-scheme: light;
 
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Dark theme: follows the device (Sistem) unless the user picked Açık or Koyu
+   (data-theme on <html>, set in index.html before the page draws). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #111113;
+    --surface: #1c1c1f;
+    --border: #2e2e34;
+    --text: #ececef;
+    --text-muted: #a1a1aa;
+    --accent: #8b9bff;
+    --accent-soft: #252a4d;
+    --reminder: #f0a44a;
+    --reminder-soft: #33260f;
+    --danger: #f97066;
+    --ok: #4ade80;
+    --ok-soft: #12301e;
+    --on-primary: #111113;
+    --on-danger: #1a0b0a;
+    --on-ok: #0b1a10;
+    --danger-soft: #34191a;
+    --danger-border: #6e2b27;
+    --mark: #5c4d10;
+    --overlay: rgba(0, 0, 0, 0.6);
+    --lightbox-bg: rgba(10, 10, 12, 0.94);
+    --page-veil: rgba(17, 17, 19, 0.97);
+    --reader-bg: #0c0c0e;
+    --reader-bar: rgba(28, 28, 31, 0.9);
+    --toast-bg: #2c2c33;
+    --tour-dim: rgba(0, 0, 0, 0.72);
+    color-scheme: dark;
+  }
+}
+:root[data-theme='dark'] {
+  --bg: #111113;
+  --surface: #1c1c1f;
+  --border: #2e2e34;
+  --text: #ececef;
+  --text-muted: #a1a1aa;
+  --accent: #8b9bff;
+  --accent-soft: #252a4d;
+  --reminder: #f0a44a;
+  --reminder-soft: #33260f;
+  --danger: #f97066;
+  --ok: #4ade80;
+  --ok-soft: #12301e;
+  --on-primary: #111113;
+  --on-danger: #1a0b0a;
+  --on-ok: #0b1a10;
+  --danger-soft: #34191a;
+  --danger-border: #6e2b27;
+  --mark: #5c4d10;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --lightbox-bg: rgba(10, 10, 12, 0.94);
+  --page-veil: rgba(17, 17, 19, 0.97);
+  --reader-bg: #0c0c0e;
+  --reader-bar: rgba(28, 28, 31, 0.9);
+  --toast-bg: #2c2c33;
+  --tour-dim: rgba(0, 0, 0, 0.72);
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -42,7 +119,7 @@ input:focus { border-color: var(--accent); }
   border: none; border-radius: 6px; padding: 7px 14px; font: inherit; font-size: 13px; font-weight: 500;
   cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
 }
-.btn-primary { background: var(--text); color: #fff; }
+.btn-primary { background: var(--text); color: var(--on-primary); }
 .btn-primary:disabled { opacity: 0.4; cursor: default; }
 .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
 
@@ -73,7 +150,7 @@ input:focus { border-color: var(--accent); }
 
 .banner-error {
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
-  background: #fef3f2; color: var(--danger); border: 1px solid #fecdca; border-radius: 8px;
+  background: var(--danger-soft); color: var(--danger); border: 1px solid var(--danger-border); border-radius: 8px;
   padding: 8px 12px; font-size: 13px; margin-bottom: 16px;
 }
 
@@ -153,15 +230,15 @@ textarea {
   background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;
 }
 
-.overlay { position: fixed; inset: 0; background: rgba(24, 24, 27, 0.4); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+.overlay { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
 .modal { width: 100%; max-width: 320px; display: flex; flex-direction: column; gap: 10px; }
 .modal-title { font-size: 14px; font-weight: 600; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
-.lightbox { background: rgba(240, 240, 242, 0.92); cursor: zoom-out; z-index: 60; }
+.lightbox { background: var(--lightbox-bg); cursor: zoom-out; z-index: 60; }
 .lightbox img { max-width: 92vw; max-height: 90vh; border-radius: 6px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25); background: #fff; cursor: default; }
 .lightbox-close {
-  position: fixed; top: 16px; right: 16px; width: 32px; height: 32px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.12);
-  background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  position: fixed; top: 16px; right: 16px; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 
 @media (max-width: 680px) {
@@ -198,7 +275,7 @@ textarea {
 .edit-editor { border: 1px solid var(--accent); border-radius: 6px; padding: 10px; font-size: 14px; background: var(--surface); min-height: 100px; max-height: 60vh; }
 
 /* Full-screen writing for long notes (Composer "expand" button, Esc to leave). */
-.composer-bar.expanded { top: 0; display: flex; flex-direction: column; background: rgba(247, 247, 248, 0.97); }
+.composer-bar.expanded { top: 0; display: flex; flex-direction: column; background: var(--page-veil); }
 .composer-bar.expanded .composer { flex: 1; width: 100%; display: flex; flex-direction: column; min-height: 0; }
 .composer-bar.expanded .composer-editor { flex: 1; max-height: none; font-size: 17px; line-height: 1.7; }
 .composer-bar.expanded .editor .ed-img { max-width: min(560px, 100%); max-height: 420px; }
@@ -217,7 +294,7 @@ textarea {
 
 /* ---- confirm dialog ---- */
 .confirm-message { font-size: 13px; color: var(--text-muted); line-height: 1.5; overflow-wrap: anywhere; }
-.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger { background: var(--danger); color: var(--on-danger); }
 .btn-danger:hover { filter: brightness(1.08); }
 
 /* ---- Google login & user ---- */
@@ -229,19 +306,23 @@ textarea {
 .user-chip img, .user-initial { width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0; }
 .user-initial { display: inline-flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 12px; }
 .user-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 480px) { .user-name { display: none; } }
+@media (max-width: 480px) {
+  .user-name { display: none; }
+  .topbar-actions { gap: 4px; }
+  .topbar-actions .btn { padding-left: 8px; padding-right: 8px; }
+}
 
 /* ---- search highlighting ---- */
-mark { background: #fff1a8; color: inherit; border-radius: 2px; padding: 0 1px; }
+mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1px; }
 .note-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .meaning-tag { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 1px 7px; margin-bottom: 3px; }
 .search-error { font-size: 12px; color: var(--reminder); background: var(--reminder-soft); border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; }
 
 /* ---- reading mode (Word-like) ---- */
-.reader { position: fixed; inset: 0; z-index: 55; background: #f3f2ef; display: flex; flex-direction: column; }
+.reader { position: fixed; inset: 0; z-index: 55; background: var(--reader-bg); display: flex; flex-direction: column; }
 .reader-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.85); border-bottom: 1px solid var(--border); font-size: 12px;
+  background: var(--reader-bar); border-bottom: 1px solid var(--border); font-size: 12px;
 }
 .reader-path { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .reader-tools { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
@@ -282,7 +363,7 @@ mark { background: #fff1a8; color: inherit; border-radius: 2px; padding: 0 1px; 
   width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid #c2760c66; background: transparent; color: transparent;
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; padding: 0;
 }
-.reminder-done:hover { color: #fff; background: var(--ok); border-color: var(--ok); }
+.reminder-done:hover { color: var(--on-ok); background: var(--ok); border-color: var(--ok); }
 .reminders-sub { font-size: 11px; font-weight: 600; color: var(--reminder); margin: 8px 0 2px; }
 
 /* ---- view tabs (Notlar | Hatırlatmalar) ---- */
@@ -303,7 +384,7 @@ mark { background: #fff1a8; color: inherit; border-radius: 2px; padding: 0 1px; 
 .agenda-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 4px 0 6px; display: inline-flex; align-items: center; gap: 4px; }
 .agenda-title.overdue { color: var(--danger); }
 .agenda-item { display: flex; gap: 12px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; }
-.agenda-item.overdue-item { border-color: #fecdca; background: #fffafa; }
+.agenda-item.overdue-item { border-color: var(--danger-border); background: var(--danger-soft); }
 .agenda-item.done-item { opacity: 0.6; }
 .agenda-item.done-item .agenda-text { text-decoration: line-through; }
 .agenda-date { width: 40px; flex-shrink: 0; text-align: center; display: flex; flex-direction: column; line-height: 1.1; }
@@ -336,7 +417,7 @@ mark { background: #fff1a8; color: inherit; border-radius: 2px; padding: 0 1px; 
 /* ---- toast ---- */
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%); bottom: 150px; z-index: 70; display: flex; align-items: center; gap: 10px;
-  background: #18181b; color: #fff; border-radius: 10px; padding: 10px 10px 10px 16px; font-size: 13px;
+  background: var(--toast-bg); color: #fff; border-radius: 10px; padding: 10px 10px 10px 16px; font-size: 13px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25); max-width: calc(100vw - 24px); flex-wrap: wrap;
 }
 .toast.error { background: var(--danger); }
@@ -357,10 +438,10 @@ mark { background: #fff1a8; color: inherit; border-radius: 2px; padding: 0 1px; 
 
 /* ---- guided tour ---- */
 .tour { position: fixed; inset: 0; z-index: 80; }
-.tour-dim { position: fixed; inset: 0; background: rgba(15, 15, 20, 0.55); }
+.tour-dim { position: fixed; inset: 0; background: var(--tour-dim); }
 .tour-spot {
   position: fixed; border-radius: 10px; pointer-events: none; transition: all 0.25s ease;
-  box-shadow: 0 0 0 9999px rgba(15, 15, 20, 0.55), 0 0 0 2px var(--accent);
+  box-shadow: 0 0 0 9999px var(--tour-dim), 0 0 0 2px var(--accent);
 }
 .tour-card { position: fixed; padding: 16px 18px 14px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25); display: flex; flex-direction: column; gap: 8px; }
 .tour-card.sheet { border-radius: 14px; }
