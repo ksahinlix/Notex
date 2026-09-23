@@ -45,6 +45,8 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D10 | Web stack: Vite + React + TypeScript; server in plain JavaScript | Active |
 | D11 | Home server is only a backup target (Phase 2) | Active |
 | D12 | Embedding model: multilingual-e5-small, opt-in, in a Web Worker | Active |
+| D13 | Category model: Gemma-2-2B via WebLLM (WebGPU) creates folders itself | Active |
+| D14 | Reminders are detected from text by a rule-based Turkish parser | Active |
 
 ### D1 — Start from scratch
 - **What:** New repository structure. `docs/prototype.jsx` is kept only as a
@@ -202,12 +204,67 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
     exact words.
   - Including the folder path in the embedded note text improved folder
     suggestions.
-- **Not yet:** inventing *new* folder names and detecting reminder dates from
-  text need a small generative model (see D3). Today, a note on a new topic
-  gets the closest existing folder as a suggestion, and the user types a new
-  path.
+- **Update:** inventing new folder names is now done by the category model
+  (D13), and reminder dates by a parser (D14). The embedding suggestions stay
+  as alternatives and as the fallback without WebGPU.
 - **Revisit when:** a better small multilingual model appears. Re-run the eval
   script with it.
+
+### D13 — Category model: Gemma-2-2B creates folders itself
+- **What:**
+  - The owner's requirement: categorizing is the point of the app, and it must
+    work from an **empty** notebook, with AI creating the categories itself.
+  - `gemma-2-2b-it-q4f16_1-MLC` via WebLLM (~1.5 GB, downloaded once, cached in
+    IndexedDB). It runs on the GPU through WebGPU in a Web Worker
+    (`web/src/ai/llm.ts`, `llm.worker.ts`). GPUs without 16-bit floats use
+    the q4f32 build.
+  - It answers JSON `{"konu", "path"}`, constrained by a JSON schema. The
+    prompt (`SYSTEM_PROMPT`) has 10 varied Turkish examples and the list of
+    existing folders (most-used first, max 80), with the rule "same topic →
+    reuse the exact path; similar category but different topic → new
+    subfolder".
+  - In the composer, ~0.8 s after typing stops, the answer fills the path and
+    becomes the first chip (tagged "yeni" if it is a new folder). Similar
+    existing folders from embeddings (D12) follow as alternatives. Saving waits
+    while the answer for the current text is pending.
+  - Turned on together with the ✨ AI button. Without WebGPU (older phones or
+    browsers), only the embedding suggestions are used, and the button tooltip
+    says so.
+- **Why (measured in Chrome on the owner's PC, Radeon RX 6600, 14 Turkish notes
+  classified one after another from an empty notebook):**
+  - First prompt ("reuse existing folders if possible", examples with
+    existing folders): every model collapsed. Qwen3.5-2B put all 14 notes into
+    2 folders, and Qwen3-1.7B used the note text as the folder name.
+  - "Topic first" prompt (`konu` before `path`, 10 varied examples):
+    Gemma-2-2B gave sensible folders for 13 of 14 notes (Sağlık / Randevu,
+    Eğlence / İzlenecekler, Alışveriş / Market, Ev / Tesisat, Seyahat / Planlar,
+    Finans / Faturalar …) and reused them for related notes. It takes
+    ~1.5–2 s per note. Qwen3-4B was similar in quality but 2× slower and a
+    bigger download. Qwen3-1.7B made spelling mistakes in its names.
+  - Merging near-duplicate names with embeddings was tested and rejected: the
+    similarity of short folder names doesn't separate "same" from "different"
+    (e.g. Market~Temizlik 0.96 vs Filmler~İzlenecekler 0.95).
+- **Known limits:** a note is occasionally misfiled (e.g. an app idea filed
+  under shopping). The chips make the fix one click. Needs WebGPU; a 1.5 GB
+  download is heavy on mobile data.
+- **Revisit when:** better small multilingual models reach WebLLM. Learning
+  from the user's corrections (feeding them back as examples) is a natural
+  next step.
+
+### D14 — Reminders: rule-based Turkish date parser
+- **What:** `web/src/lib/reminder.ts` finds "yarın 15:00", "perşembe akşam 7'de",
+  "3 gün sonra", "25 Ekim'de", "30.09", "yarım saat sonra" and similar in the
+  text. The composer shows a chip "Hatırlatma: 24 Eyl 15:00 (“Yarın 15:00”)"
+  that can be dismissed or replaced with a hand-picked time (clock button).
+- **Why not the language model:** date arithmetic is exactly what small models
+  get wrong. A parser is instant, testable and works without AI. The owner
+  asked for detection from text (not notifications) as the fix for
+  "reminders don't work".
+- **Details:** JavaScript's `\b` doesn't understand Turkish letters, so the
+  patterns use Unicode-aware boundaries. A one-digit month needs a year, so
+  "React 19.2" isn't a date. Without a time, 09:00 is used; with only a time,
+  today if it is still ahead, otherwise tomorrow.
+- **Not yet:** notifications when the time comes (see Open questions).
 
 ---
 
@@ -220,11 +277,12 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   the free Render service sleeps. Plan: an external free scheduler (GitHub
   Actions cron or cron-job.org) calls a `/api/reminders/due` endpoint every few
   minutes. iOS delivers web push only to PWAs added to the home screen.
-- **Rich-text editor:** the prototype uses `document.execCommand`, which is
-  deprecated. Consider TipTap or Lexical when porting the composer.
-- **Generative model choice** for new folder names and reminder dates (see
-  D3, D12). Candidates: Qwen / Gemma small models via WebLLM. Alternatively,
-  rule-based date parsing for Turkish ("yarın 10'da", "perşembe").
+- **Rich-text editor:** `web/src/components/RichEditor.tsx` is a small
+  contentEditable editor (text + images only) using `document.execCommand`,
+  which is deprecated but still supported everywhere. Consider TipTap or
+  Lexical if formatting (bold, lists) is wanted.
+- **Reminder notifications:** reminders are now detected (D14) and listed, but
+  nothing pops up at the time yet.
 
 ---
 
@@ -429,3 +487,56 @@ a page reload.
 
 **Next:** try it on real notes. Then a generative model for new folder names
 and reminder dates, offline-first storage, and PWA.
+
+### 2026-09-23 — AI creates categories, reminders from text, pasting web content
+**Owner feedback on the first AI version:** suggestions can't be judged with
+one category, and AI must create categories itself. The input area is too
+small for long text, images from web pages are lost when pasted, and reminders
+aren't detected from the text.
+
+**What we did:**
+- **Categories (D13):** compared 4 on-device language models × 3 prompt
+  designs in real Chrome with WebGPU. Picked Gemma-2-2B with a "topic first"
+  prompt. The composer fills the folder by itself; the chips show the AI's
+  folder (tagged "yeni" when new) plus similar existing folders.
+- **Reminders (D14):** rule-based Turkish parser, 35 tests. There is a chip in
+  the composer to dismiss it or set the time by hand.
+- **Pasting web content:** `web/src/lib/paste.ts` turns pasted HTML into text
+  and image blocks in order (largest srcset image, lazy-load sources, relative
+  links). `RichEditor` shows placeholders and loads each image directly, or
+  through the new `GET /api/image-proxy` (login required; SSRF-guarded:
+  public addresses only on every redirect, images only, 8 MB max, 10 s
+  timeout). Saving waits for images.
+- **Editor:** grows with the text up to 40% of the screen, then scrolls. There
+  is a full-screen writing mode (Esc leaves). Editing a note uses the same
+  editor, so images stay in place. Images in notes are shown as their own
+  block.
+- **Bug found by the browser test:** after saving, the next note briefly
+  showed the previous note's AI folder, and a quick save would have used it.
+  A suggestion now only applies to the text it was made for, and saving waits
+  for the current answer.
+
+**How verified:**
+- Web: 62 unit tests (reminder parser 35, paste 5, category-model helpers 3,
+  plus existing). Typecheck, lint and build pass.
+- Server: image proxy tests (auth, private-address and redirect blocking,
+  non-image, size limit, upstream errors).
+- Browser test in real Chrome with WebGPU (mocked API, empty notebook):
+  22 checks passed.
+  - Both models ready in 12 s from cache (47 s on the first download).
+  - From an empty notebook, 7 notes got 4 sensible folders:
+    Eğlence / İzlenecekler (film + series), Alışveriş / Market (milk +
+    detergent), Ev / Tamirat (faucet + boiler), Finans / Faturalar. The dentist
+    note went to Sağlık / Randevu.
+  - "Yarın 15:00 …" was saved with a reminder for tomorrow 15:00, and a
+    dismissed reminder is not saved.
+  - Pasted HTML with 2 images: one loaded directly, the CORS-blocked one
+    through /api/image-proxy. Saved as text | image | text | image | text.
+  - The editor grows to 40% of the screen, and full-screen mode works (Esc
+    leaves). Editing a note keeps its images.
+  - No horizontal scroll at phone width, and no page errors.
+  - A miss: a pasted cat-care article was filed under Ev / Tamirat. That's the
+    kind of mistake the chips are there to fix.
+
+**Next:** try it with real notes; reminder notifications; learning from the
+user's folder corrections; offline-first; PWA.

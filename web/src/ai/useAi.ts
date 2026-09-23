@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { matchesQuery } from '../lib/notes'
 import type { Note, NoteContent } from '../lib/types'
 import { ai, type AiStatus } from './engine'
+import { llm, type LlmStatus } from './llm'
 import { noteEmbeddingText, rankNotes, suggestFolders, type FolderSuggestion, type Vec } from './vector'
 
 export function useAiStatus(): AiStatus {
@@ -118,6 +119,50 @@ export function useFolderSuggestions(text: string, notes: Note[], vectors: NoteV
     }
   }, [t, notes, vectors, ready])
 
+  // A new note must not inherit the previous note's suggestions.
+  if (t.length < 4 && result.text) setResult({ text: '', list: [] })
+
   // While typing, keep showing the previous suggestions until new ones arrive.
   return ready && t.length >= 4 ? result.list : []
+}
+
+export function useLlmStatus(): LlmStatus {
+  return useSyncExternalStore(llm.subscribe, llm.getSnapshot)
+}
+
+/**
+ * The category model's folder for the text being written (D13): asked ~0.8 s
+ * after typing stops. Keeps showing the last answer while a new one is computed.
+ */
+export function useCategorySuggestion(
+  text: string,
+  folders: string[][],
+  ready: boolean,
+): { path: string[] | null; loading: boolean; forText: string } {
+  const [result, setResult] = useState<{ text: string; path: string[] | null }>({ text: '', path: null })
+  const t = text.trim()
+
+  // A new note (text cleared) must not inherit the previous note's answer.
+  // (Adjusting state during render, as recommended over an effect.)
+  if (t.length < 4 && result.text) setResult({ text: '', path: null })
+
+  useEffect(() => {
+    if (!ready || t.length < 4) return
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      const path = await llm.classify(t, folders)
+      if (!cancelled) setResult({ text: t, path })
+    }, 800)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+    // `folders` is rebuilt on each render; its content only changes with notes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t, ready, folders.length])
+
+  if (!ready || t.length < 4) return { path: null, loading: false, forText: '' }
+  // While the user keeps typing the previous answer stays visible, but it is
+  // marked as loading until the answer for the current text arrives.
+  return { path: result.path, loading: result.text !== t, forText: result.text }
 }

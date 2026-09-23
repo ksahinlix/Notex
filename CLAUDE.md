@@ -27,7 +27,10 @@ New decisions go in the Decisions table and get their own section. Update
     then `PUT` to the server.
   - `src/ai/`: on-device embeddings (D12): model in a Web Worker, ranking in
     `vector.ts`, hooks in `useAi.ts`. Model evaluation: `scripts/eval-ai.mjs`.
-  - `src/components/`: UI (NotesPage, Sidebar, NoteCard, Composer,
+    Category model (D13): `llm.ts` + `llm.worker.ts` (WebLLM, WebGPU).
+  - `src/lib/reminder.ts` (Turkish date parser, D14), `src/lib/paste.ts`
+    (pasted HTML -> text/image blocks).
+  - `src/components/`: UI (NotesPage, Sidebar, NoteCard, Composer, RichEditor,
     PasswordModal, Lightbox, Reminders).
 - UI changes: check them in a real browser (Playwright with Chromium at
   `/opt/pw-browsers/chromium` in cloud sessions) on desktop and at phone width.

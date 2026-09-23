@@ -196,3 +196,30 @@ textarea {
 }
 .chip:hover { border-color: var(--accent); color: var(--accent); }
 .chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+/* ---- rich editor (text + inline images) ---- */
+.editor {
+  outline: none; font-size: 16px; line-height: 1.5; color: var(--text); white-space: pre-wrap;
+  overflow-wrap: anywhere; min-height: 48px; max-height: 40vh; overflow-y: auto; cursor: text;
+}
+.editor.empty::before { content: attr(data-placeholder); color: var(--text-muted); pointer-events: none; }
+.editor .ed-img { display: block; max-width: min(320px, 100%); max-height: 240px; border-radius: 6px; margin: 6px 0; border: 1px solid var(--border); }
+.edit-editor { border: 1px solid var(--accent); border-radius: 6px; padding: 10px; font-size: 14px; background: var(--surface); min-height: 100px; max-height: 60vh; }
+
+/* Full-screen writing for long notes (Composer "expand" button, Esc to leave). */
+.composer-bar.expanded { top: 0; display: flex; flex-direction: column; background: rgba(247, 247, 248, 0.97); }
+.composer-bar.expanded .composer { flex: 1; width: 100%; display: flex; flex-direction: column; min-height: 0; }
+.composer-bar.expanded .composer-editor { flex: 1; max-height: none; font-size: 17px; line-height: 1.7; }
+.composer-bar.expanded .editor .ed-img { max-width: min(560px, 100%); max-height: 420px; }
+
+.reminder-chip {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 4px 6px 4px 10px; border-radius: 999px;
+  background: var(--reminder-soft); color: var(--reminder); font-size: 12px; max-width: 100%;
+}
+.reminder-chip b { font-weight: 600; }
+.reminder-chip .muted { font-size: 11px; }
+.reminder-chip input[type='datetime-local'] { width: auto; padding: 2px 6px; font-size: 12px; }
+.chip-new { margin-left: 6px; font-size: 10px; font-weight: 600; color: var(--ok); background: var(--ok-soft); border-radius: 999px; padding: 0 6px; }
+
+/* Images inside notes: their own block (suits pasted web content). */
+.note-body .note-img { display: block; }

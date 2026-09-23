@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { LogOut, Search, Sparkles, X } from 'lucide-react'
-import { useAiStatus, useNoteVectors, useSemanticSearch } from '../ai/useAi'
+import { useAiStatus, useLlmStatus, useNoteVectors, useSemanticSearch } from '../ai/useAi'
 import { matchesQuery } from '../lib/notes'
 import { allPaths, buildTree, findProtectedAncestor, pathKeyOf, pathStartsWith } from '../lib/tree'
 import type { Note } from '../lib/types'
@@ -33,6 +33,7 @@ export default function NotesPage({ onLogout }: { onLogout: () => void }) {
 
   const aiStatus = useAiStatus()
   const aiReady = aiStatus.state === 'ready'
+  const llmStatus = useLlmStatus()
   const vectors = useNoteVectors(state.notes, contentOf, aiReady, state.plain)
 
   const scoped = useMemo(
@@ -91,7 +92,7 @@ export default function NotesPage({ onLogout }: { onLogout: () => void }) {
         <header className="topbar">
           <strong>Notlar</strong>
           <div className="topbar-actions">
-            <AiToggle status={aiStatus} />
+            <AiToggle status={aiStatus} llm={llmStatus} />
             <button className="btn btn-ghost" onClick={onLogout} title="Çıkış"><LogOut size={14} /></button>
           </div>
         </header>
@@ -156,7 +157,7 @@ export default function NotesPage({ onLogout }: { onLogout: () => void }) {
         </div>
       </main>
 
-      <Composer selectedPath={selectedPath} pathOptionsId={PATH_OPTIONS_ID} notes={state.notes} vectors={vectors} aiReady={aiReady} />
+      <Composer selectedPath={selectedPath} pathOptionsId={PATH_OPTIONS_ID} notes={state.notes} vectors={vectors} aiReady={aiReady} llmReady={llmStatus.state === 'ready'} />
     </>
   )
 }
