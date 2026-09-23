@@ -21,6 +21,7 @@ import RemindersPage from './RemindersPage'
 import UpcomingStrip from './UpcomingStrip'
 import Sidebar from './Sidebar'
 import { ToastHost } from './ToastHost'
+import ThemeToggle from './ThemeToggle'
 import Tour from './Tour'
 
 const PATH_OPTIONS_ID = 'notex-paths'
@@ -177,6 +178,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
             </button>
           </nav>
           <div className="topbar-actions">
+            <ThemeToggle />
             <button
               className="btn btn-ghost"
               data-tour="help"

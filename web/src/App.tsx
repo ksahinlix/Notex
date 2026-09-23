@@ -3,6 +3,7 @@ import { clearAiCaches } from './ai/useAi'
 import NotesPage from './components/NotesPage'
 import { api, ApiError, UNAUTHORIZED_EVENT, type User } from './lib/api'
 import { googleSignedOut, loadGoogleIdentity } from './lib/google'
+import { isDark } from './lib/theme'
 import { store } from './state/store'
 
 type Status = { state: 'loading' } | { state: 'loggedOut' } | { state: 'loggedIn'; user: User }
@@ -69,7 +70,7 @@ function Login({ onSuccess }: { onSuccess: (user: User) => void }) {
             }
           },
         })
-        gis.renderButton(buttonRef.current, { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', locale: 'tr', width: 260 })
+        gis.renderButton(buttonRef.current, { theme: isDark() ? 'filled_black' : 'outline', size: 'large', text: 'signin_with', shape: 'pill', locale: 'tr', width: 260 })
       } catch {
         if (!cancelled) setError('Google girişi yüklenemedi. İnternet bağlantını kontrol et.')
       }

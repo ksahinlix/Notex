@@ -49,6 +49,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D15 | AI runs on the server via Cloudflare Workers AI (free tier) | Active |
 | D16 | Multiple users, "Sign in with Google" only, open sign-up with per-user limits | Active |
 | D14 | Reminders are detected from text by a rule-based Turkish parser | Active |
+| D17 | Dark mode through CSS variables; Sistem/Açık/Koyu remembered per browser | Active |
 
 ### D1 — Start from scratch
 - **What:** New repository structure. `docs/prototype.jsx` is kept only as a
@@ -368,6 +369,25 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   used.
 - **Revisit when:** there are many users (per-user limits may need an admin
   view), or someone without a Google account needs access.
+
+### D17 — Dark mode through CSS variables, choice per browser
+- **Decision:** every color in `web/src/index.css` is a CSS variable in
+  `:root`. The dark theme only redefines those variables; components don't
+  know about themes.
+  - Three choices, cycled by a header button: **Sistem** (follows the device,
+    the default), **Açık** and **Koyu**.
+  - The choice is stored in the browser's localStorage (`notex-theme`), not
+    on the server.
+  - A tiny inline script in `web/index.html` sets `data-theme` on `<html>`
+    before the page draws, so a dark page never flashes white on load.
+- **Why:** variables keep dark mode to one block of CSS instead of edits in
+  every component. localStorage needs no schema or API change, and the device
+  setting already covers most people. It's per browser on purpose: a phone
+  and a laptop can reasonably differ.
+- **Rule for new UI:** don't write literal colors in CSS or components; add a
+  variable with a light and a dark value.
+- **Revisit when:** users want the choice to follow their account across
+  devices (then save it on the `users` row).
 
 ---
 
@@ -736,22 +756,22 @@ when editing.
 **What we did:**
 - Search covers all notes (with a hint when a folder is selected) and waits
   0.8 s after typing stops. AI errors are shown. Matched words are highlighted
-  (\`lib/highlight.ts\`, Turkish-aware), and AI-only results get an "anlamca
+  (`lib/highlight.ts`, Turkish-aware), and AI-only results get an "anlamca
   ilgili" label. The re-ranker sees 400 characters per note instead of 200.
-- Reading mode (\`Reader.tsx\`): a full-screen, centered 760 px page in a
+- Reading mode (`Reader.tsx`): a full-screen, centered 760 px page in a
   serif font, A−/A+ text size (remembered), ←/→ to the previous or next note,
   Esc to close. It replaces the old inline "expanded" card.
 - Reminders: "hatırlat", "anımsat", "unutma" and "remind…" create a reminder.
   A date in the text wins; otherwise it is undated. New column
-  \`notes.is_reminder\` and API field \`isReminder\`. The reminders panel lists
+  `notes.is_reminder` and API field `isReminder`. The reminders panel lists
   undated ones under "Tarihsiz", and ✓ marks a reminder done.
-- Manual reminder picker (\`ReminderPicker.tsx\`): quick choices (1 saat,
+- Manual reminder picker (`ReminderPicker.tsx`): quick choices (1 saat,
   2 saat, Bu akşam, Yarın 09:00, 3 gün, 1 hafta, Tarihsiz), or a day list
   without a year plus a time. It opens at 1 hour later. The composer and note
   editing both use it.
 - Editing: the date field is gone. Edited notes show "düzenlendi <time>".
 - Fixes found on the way:
-  - The delete preview used \`/s+/\` instead of \`/\s+/\` (every "s" became a
+  - The delete preview used `/s+/` instead of `/\s+/` (every "s" became a
     space), a slip from an earlier shell edit.
   - Going back to "Tümü" kept the previously selected folder as the
     composer's path; now AI chooses again.
@@ -773,17 +793,17 @@ categories (not in the notes tree), and drag & drop "not working well".
 
 **What we did:**
 - **Repeating reminders:**
-  - New columns \`notes.reminder_repeat\` (daily/weekly/monthly/yearly,
-    counted from \`reminder_at\`) and \`notes.reminder_done_until\`.
+  - New columns `notes.reminder_repeat` (daily/weekly/monthly/yearly,
+    counted from `reminder_at`) and `notes.reminder_done_until`.
   - The parser understands "her ayın 28'i", "her ay 15'inde", "aylık",
     "her pazartesi", "haftalık", "her gün / sabah / akşam", and "her yıl
     5 Mart".
-  - \`lib/recurrence.ts\`: month ends use the last day ("her ayın 31'i" → 30th
+  - `lib/recurrence.ts`: month ends use the last day ("her ayın 31'i" → 30th
     or 28th), and 29 February becomes 28 February in other years.
   - The picker gets a "Tekrar" choice.
-- **Reminders page** (\`RemindersPage.tsx\`, tabs "Notlar | Hatırlatmalar",
-  \`#hatirlatmalar\` in the URL):
-  - Categories on the left. The agenda (\`lib/agenda.ts\`) has Gecikmiş, the
+- **Reminders page** (`RemindersPage.tsx`, tabs "Notlar | Hatırlatmalar",
+  `#hatirlatmalar` in the URL):
+  - Categories on the left. The agenda (`lib/agenda.ts`) has Gecikmiş, the
     next 6 months by month, Tarihsiz, and Tamamlananlar.
   - Monthly and yearly reminders show every occurrence, weekly ones 4 weeks,
     daily ones only the next.
@@ -824,7 +844,7 @@ The owner chose: keep the note's folder by default with a one-click
 alternative, and also move and rename whole folders.
 
 **What we did:**
-- \`lib/move.ts\` (8 tests):
+- `lib/move.ts` (8 tests):
   - Rule 1: a moved note keeps its last folder name (no "LSA / LSA"; a
     one-level note goes to the target).
   - Rule 2: a folder moves with its whole branch; renaming is a move to the
@@ -836,7 +856,7 @@ alternative, and also move and rename whole folders.
   top level), or use "⋯" → "Yeniden adlandır" / "Taşı…". The toast shows how
   many notes moved, with "Geri al" unless the move merged into an existing
   folder.
-- \`store.moveFolder\` handles protected folders:
+- `store.moveFolder` handles protected folders:
   - A protected folder moves with its password. Its notes keep their cipher,
     because the key comes from password + salt, not the path. Its record is
     saved under the new path, then the old one is deleted.
@@ -844,7 +864,7 @@ alternative, and also move and rename whole folders.
     asking for the password.
   - Nesting protected folders is refused, and a cancelled password changes
     nothing.
-- "düzenlendi" now comes from \`content.editedAt\`, set only when the text
+- "düzenlendi" now comes from `content.editedAt`, set only when the text
   changes. Moving a note no longer marks it as edited.
 
 **How verified:**
@@ -860,7 +880,7 @@ alternative, and also move and rename whole folders.
   this batch's intended changes.
 
 ### 2026-09-24 — Guided tour
-**What:** A built-in tour (\`components/Tour.tsx\`, steps in \`lib/tour.ts\`, no
+**What:** A built-in tour (`components/Tour.tsx`, steps in `lib/tour.ts`, no
 library).
 - The page dims and one element at a time is highlighted with a short Turkish
   explanation. There are 10 steps: welcome, writing/pasting, AI choosing the
@@ -870,8 +890,8 @@ library).
 - Navigation: Geri/İleri/Bitir, ← → Enter, Esc. On phones the card sits at
   the top or bottom, away from the highlighted element.
 - It opens by itself on a user's first visit (remembered per browser in
-  localStorage, \`notex-tour-done:<userId>\`) and any time from the new ?
-  button. Elements are marked with \`data-tour="…"\`, so styling changes don't
+  localStorage, `notex-tour-done:<userId>`) and any time from the new ?
+  button. Elements are marked with `data-tour="…"`, so styling changes don't
   break it.
 
 **Bug found by the browser test:** the tour decided which steps exist when it
@@ -884,3 +904,48 @@ the note step was always skipped. Steps are now checked when moving to them.
   element exactly; the note step shows the note's buttons; Bitir closes and
   it doesn't reopen after a reload; ? reopens it; keyboard works; a user
   without notes gets 9 steps; on a phone the card never covers the target.
+
+### 2026-09-24 — Learning guide
+**What:** `docs/GUIDE.md`, a complete guide for the owner (a developer
+returning from low-code).
+- The big picture, and one note followed end to end.
+- Every tool and service: what it is, why we chose it, how we use it (Git and
+  GitHub, Node and npm, JS and TS, React, Vite, Express, PostgreSQL and pg,
+  Neon, Render, Cloudflare Workers AI, LLM and embedding concepts, Google
+  sign-in, test tools, browser APIs).
+- A file-by-file repository tour, the data model and API, and how each
+  feature works.
+- Security, testing, everyday workflows, how we worked with Claude Code, a
+  glossary, and exercises.
+
+Numbers in it (limits, test counts, models) were checked against the code.
+README and CLAUDE.md link to it; CLAUDE.md asks to keep it updated.
+
+### 2026-09-24 — Dark mode (D17)
+**What:**
+- A dark palette for every screen: notes, search highlights, full-screen
+  writing, reading mode, Reminders page, dialogs, toasts, tour and login
+  (Google's button switches to its dark style).
+- Hard-coded colors in `index.css` became variables (`--on-primary`,
+  `--overlay`, `--mark`, `--reader-bg`, `--toast-bg`, `--tour-dim`, …).
+- A header button cycles Sistem → Açık → Koyu (`components/ThemeToggle.tsx`,
+  logic in `lib/theme.ts`). The choice is remembered per browser, and
+  `index.html` applies it before the first paint.
+- On small phones the header buttons are slightly tighter so the extra button
+  fits (the browser test caught a 28 px sideways scroll).
+- Also removed stray backslashes before backticks in earlier log entries.
+
+**How verified:**
+- Web: 111 tests (new: `theme.test.ts` for cycling, saving, `data-theme`).
+  Lint and build are clean.
+- Browser test with a dark device setting, 16 checks:
+  - no near-white panel on the notes page, search, full-screen writing,
+    reader, delete dialog, Reminders page, or phone;
+  - Açık overrides the device and survives a reload; Koyu, then Sistem, which
+    clears the choice;
+  - a saved Koyu applies even when the app's script doesn't load (no flash);
+  - the login page is dark; no page errors.
+- The tour test (12 checks) still passes.
+
+**Next:** merge together with the learning guide (PR #10) after the owner
+tries it.

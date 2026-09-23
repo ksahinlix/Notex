@@ -3,6 +3,7 @@
 A personal, hierarchical note app with on-device AI for sorting and searching
 notes, and end-to-end encrypted folders. Web first, then mobile.
 
+- **How everything works (learning guide):** [`docs/GUIDE.md`](docs/GUIDE.md)
 - **Why things are built this way:** [`docs/PROJECT_LOG.md`](docs/PROJECT_LOG.md)
 - **AI:** folder suggestions while you write and search by meaning, done by the server with Cloudflare Workers AI (free tier). Notes in locked folders are never sent. Without Cloudflare settings the app works, just without AI.
 - **Original prototype:** [`docs/prototype.jsx`](docs/prototype.jsx)
