@@ -884,3 +884,19 @@ the note step was always skipped. Steps are now checked when moving to them.
   element exactly; the note step shows the note's buttons; Bitir closes and
   it doesn't reopen after a reload; ? reopens it; keyboard works; a user
   without notes gets 9 steps; on a phone the card never covers the target.
+
+### 2026-09-24 — Learning guide
+**What:** \`docs/GUIDE.md\`, a complete guide for the owner (a developer
+returning from low-code).
+- The big picture, and one note followed end to end.
+- Every tool and service: what it is, why we chose it, how we use it (Git and
+  GitHub, Node and npm, JS and TS, React, Vite, Express, PostgreSQL and pg,
+  Neon, Render, Cloudflare Workers AI, LLM and embedding concepts, Google
+  sign-in, test tools, browser APIs).
+- A file-by-file repository tour, the data model and API, and how each
+  feature works.
+- Security, testing, everyday workflows, how we worked with Claude Code, a
+  glossary, and exercises.
+
+Numbers in it (limits, test counts, models) were checked against the code.
+README and CLAUDE.md link to it; CLAUDE.md asks to keep it updated.

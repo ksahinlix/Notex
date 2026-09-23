@@ -8,6 +8,10 @@ in English, and the **UI text is Turkish**.
 its reasoning. Don't re-open a decision unless the user asks; if one must
 change, add a new decision that supersedes it.
 
+`docs/GUIDE.md` explains the whole system for the owner (a developer
+returning from low-code). When a feature, tool or workflow changes, update the
+matching section there too.
+
 ## Keep the log up to date
 After any meaningful change, add a dated entry to the **Log** section of
 `docs/PROJECT_LOG.md`: what we did, why, how it was verified, and what's next.
