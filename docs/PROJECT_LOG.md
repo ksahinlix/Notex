@@ -858,3 +858,29 @@ alternative, and also move and rename whole folders.
   subfolders.
 - The earlier browser tests (24 + 24 checks) pass after updating them for
   this batch's intended changes.
+
+### 2026-09-24 — Guided tour
+**What:** A built-in tour (\`components/Tour.tsx\`, steps in \`lib/tour.ts\`, no
+library).
+- The page dims and one element at a time is highlighted with a short Turkish
+  explanation. There are 10 steps: welcome, writing/pasting, AI choosing the
+  folder, reminders from text, full-screen writing, folder tree
+  (drag/rename/lock), meaning search, note buttons, the Reminders page, and
+  how to reopen the tour.
+- Navigation: Geri/İleri/Bitir, ← → Enter, Esc. On phones the card sits at
+  the top or bottom, away from the highlighted element.
+- It opens by itself on a user's first visit (remembered per browser in
+  localStorage, \`notex-tour-done:<userId>\`) and any time from the new ?
+  button. Elements are marked with \`data-tour="…"\`, so styling changes don't
+  break it.
+
+**Bug found by the browser test:** the tour decided which steps exist when it
+opened. On the first visit it opens in the same render as the note list, so
+the note step was always skipped. Steps are now checked when moving to them.
+
+**How verified:**
+- Web: 106 tests (new: step filtering and order).
+- Browser test, 12 checks: opens on first visit; all 10 steps highlight their
+  element exactly; the note step shows the note's buttons; Bitir closes and
+  it doesn't reopen after a reload; ? reopens it; keyboard works; a user
+  without notes gets 9 steps; on a phone the card never covers the target.
