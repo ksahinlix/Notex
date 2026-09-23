@@ -1,21 +1,30 @@
 import { useRef, useState } from 'react'
-import { Clock, ImagePlus, ListChecks, Plus, X } from 'lucide-react'
+import { Clock, ImagePlus, ListChecks, Plus, Sparkles, X } from 'lucide-react'
+import { useFolderSuggestions, type NoteVectors } from '../ai/useAi'
 import { fromLocalInput } from '../lib/format'
 import { fileToDataUrl, imageFilesFrom } from '../lib/images'
 import { buildBlocks } from '../lib/notes'
 import { parsePath } from '../lib/tree'
+import type { Note } from '../lib/types'
 import { store } from '../state/store'
 
 interface Props {
   selectedPath: string[] | null
   pathOptionsId: string
+  notes: Note[]
+  vectors: NoteVectors
+  aiReady: boolean
 }
 
-// Bottom bar for writing new notes. The AI path suggestion (D3) will plug in
-// here later; for now the path is typed (with autocomplete from existing folders).
-export default function Composer({ selectedPath, pathOptionsId }: Props) {
+/** Who set the path field: AI keeps filling it until the user types or picks a folder. */
+type PathSource = 'ai' | 'user' | 'selection'
+
+// Bottom bar for writing new notes. With AI on, it suggests existing pages for
+// the text being written (D3) and fills the path with the best one.
+export default function Composer({ selectedPath, pathOptionsId, notes, vectors, aiReady }: Props) {
   const [text, setText] = useState('')
   const [path, setPath] = useState('')
+  const [pathSource, setPathSource] = useState<PathSource>('ai')
   const [images, setImages] = useState<string[]>([])
   const [isListItem, setIsListItem] = useState(false)
   const [showReminder, setShowReminder] = useState(false)
@@ -30,8 +39,15 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
   const [prevSelected, setPrevSelected] = useState(selectedPath)
   if (selectedPath !== prevSelected) {
     setPrevSelected(selectedPath)
-    if (selectedPath) setPath(selectedPath.join(' / '))
+    if (selectedPath) {
+      setPath(selectedPath.join(' / '))
+      setPathSource('selection')
+    }
   }
+
+  const suggestions = useFolderSuggestions(text, notes, vectors, aiReady)
+  // The path shown (and saved): AI's top pick while the path is AI-controlled.
+  const effectivePath = pathSource === 'ai' && suggestions.length ? suggestions[0].path.join(' / ') : path
 
   async function addFiles(files: File[]) {
     if (!files.length) return
@@ -41,7 +57,7 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
 
   async function save() {
     const t = text.trim()
-    const p = parsePath(path)
+    const p = parsePath(effectivePath)
     if (!t && !images.length) return
     if (!p.length) return setError('Önce bir yol yaz: Kategori / Klasör / Sayfa')
     const reminderAt = showReminder ? fromLocalInput(reminder) : null
@@ -66,6 +82,11 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
     setIsListItem(false)
     setShowReminder(false)
     setReminder('')
+    // Next note: let AI suggest again, unless a folder is selected in the tree.
+    if (!selectedPath) {
+      setPath('')
+      setPathSource('ai')
+    }
     textRef.current?.focus()
   }
 
@@ -112,7 +133,12 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
         )}
 
         <div className="composer-row">
-          <input className="path-input" list={pathOptionsId} placeholder="Kategori / Klasör / Sayfa" value={path} onChange={(e) => setPath(e.target.value)} />
+          <input className="path-input" list={pathOptionsId} placeholder="Kategori / Klasör / Sayfa" value={effectivePath}
+            onChange={(e) => {
+              setPath(e.target.value)
+              setPathSource(e.target.value.trim() ? 'user' : 'ai')
+            }}
+          />
           <button className={`btn btn-ghost ${isListItem ? 'on' : ''}`} title="Liste öğesi (işaretlenebilir)" onClick={() => setIsListItem(!isListItem)}>
             <ListChecks size={14} />
           </button>
@@ -122,7 +148,7 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
           <button className="btn btn-ghost" title="Görsel ekle" onClick={() => fileRef.current?.click()}>
             <ImagePlus size={14} />
           </button>
-          <button className="btn btn-primary" onClick={save} disabled={busy || (!text.trim() && !images.length) || !path.trim()}>
+          <button className="btn btn-primary" onClick={save} disabled={busy || (!text.trim() && !images.length) || !effectivePath.trim()}>
             <Plus size={14} /> Ekle
           </button>
           <input
@@ -137,6 +163,27 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
             }}
           />
         </div>
+
+        {suggestions.length > 0 && (
+          <div className="suggestions">
+            <Sparkles size={12} className="c-accent" />
+            {suggestions.map((sg) => {
+              const label = sg.path.join(' / ')
+              return (
+                <button
+                  key={label}
+                  className={`chip ${label === effectivePath ? 'on' : ''}`}
+                  onClick={() => {
+                    setPath(label)
+                    setPathSource('user')
+                  }}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {showReminder && (
           <div className="composer-row">

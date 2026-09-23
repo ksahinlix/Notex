@@ -4,6 +4,7 @@ A personal, hierarchical note app with on-device AI for sorting and searching
 notes, and end-to-end encrypted folders. Web first, then mobile.
 
 - **Why things are built this way:** [`docs/PROJECT_LOG.md`](docs/PROJECT_LOG.md)
+- **AI:** click ✨ **AI** in the app header. A ~120 MB model downloads once and then runs in your browser; notes are never sent anywhere. It adds search by meaning and folder suggestions while you write.
 - **Original prototype:** [`docs/prototype.jsx`](docs/prototype.jsx)
 
 ## Project layout

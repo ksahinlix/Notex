@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { LogOut, Search, X } from 'lucide-react'
+import { LogOut, Search, Sparkles, X } from 'lucide-react'
+import { useAiStatus, useNoteVectors, useSemanticSearch } from '../ai/useAi'
 import { matchesQuery } from '../lib/notes'
 import { allPaths, buildTree, findProtectedAncestor, pathKeyOf, pathStartsWith } from '../lib/tree'
 import type { Note } from '../lib/types'
 import { store, useNotex } from '../state/store'
+import AiToggle from './AiToggle'
 import Composer from './Composer'
 import Lightbox from './Lightbox'
 import NoteCard from './NoteCard'
@@ -29,12 +31,26 @@ export default function NotesPage({ onLogout }: { onLogout: () => void }) {
   const paths = useMemo(() => allPaths(tree).map((p) => p.join(' / ')), [tree])
   const contentOf = (n: Note) => store.contentOf(n)
 
-  const visible = state.notes.filter((n) => {
-    if (selectedPath && !pathStartsWith(n.path, selectedPath)) return false
-    if (!query.trim()) return true
-    const c = contentOf(n)
-    return !!c && matchesQuery(n, c, query) // locked notes can't be searched
-  })
+  const aiStatus = useAiStatus()
+  const aiReady = aiStatus.state === 'ready'
+  const vectors = useNoteVectors(state.notes, contentOf, aiReady, state.plain)
+
+  const scoped = useMemo(
+    () => (selectedPath ? state.notes.filter((n) => pathStartsWith(n.path, selectedPath)) : state.notes),
+    [state.notes, selectedPath],
+  )
+  // With AI on, search ranks by meaning (keyword matches pinned first);
+  // otherwise it is a plain keyword filter. Locked notes can't be searched.
+  const semanticIds = useSemanticSearch(query, scoped, contentOf, vectors, aiReady)
+  const byId = new Map(scoped.map((n) => [n.id, n]))
+  const visible = !query.trim()
+    ? scoped
+    : semanticIds
+      ? semanticIds.flatMap((id) => byId.get(id) ?? [])
+      : scoped.filter((n) => {
+          const c = contentOf(n)
+          return !!c && matchesQuery(n, c, query)
+        })
 
   async function onLockClick(path: string[]) {
     setTreeError('')
@@ -74,7 +90,10 @@ export default function NotesPage({ onLogout }: { onLogout: () => void }) {
       <main className="page">
         <header className="topbar">
           <strong>Notlar</strong>
-          <button className="btn btn-ghost" onClick={onLogout} title="Çıkış"><LogOut size={14} /></button>
+          <div className="topbar-actions">
+            <AiToggle status={aiStatus} />
+            <button className="btn btn-ghost" onClick={onLogout} title="Çıkış"><LogOut size={14} /></button>
+          </div>
         </header>
 
         {state.syncError && (
@@ -88,7 +107,7 @@ export default function NotesPage({ onLogout }: { onLogout: () => void }) {
 
         <div className="search">
           <Search size={14} className="search-icon" />
-          <input placeholder="Notlarda ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input placeholder={aiReady ? 'Notlarda ara... (anlamına göre de bulur)' : 'Notlarda ara...'} value={query} onChange={(e) => setQuery(e.target.value)} />
           {query && <button className="icon-btn search-clear" onClick={() => setQuery('')} aria-label="Temizle"><X size={13} /></button>}
         </div>
 
@@ -111,6 +130,9 @@ export default function NotesPage({ onLogout }: { onLogout: () => void }) {
 
           <section className="notes">
             {selectedPath && <div className="crumb">{selectedPath.join(' / ')}</div>}
+            {semanticIds && query.trim() && (
+              <div className="search-note"><Sparkles size={11} /> Anlamına göre sıralandı · {visible.length} sonuç</div>
+            )}
             {!state.loaded ? (
               <div className="muted">Yükleniyor...</div>
             ) : visible.length === 0 ? (
@@ -134,7 +156,7 @@ export default function NotesPage({ onLogout }: { onLogout: () => void }) {
         </div>
       </main>
 
-      <Composer selectedPath={selectedPath} pathOptionsId={PATH_OPTIONS_ID} />
+      <Composer selectedPath={selectedPath} pathOptionsId={PATH_OPTIONS_ID} notes={state.notes} vectors={vectors} aiReady={aiReady} />
     </>
   )
 }
