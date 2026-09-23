@@ -7,6 +7,7 @@ const NOW = new Date(2026, 8, 23, 14, 0)
 function at(text: string) {
   const r = parseReminder(text, NOW)
   if (!r) return null
+  if (!r.date) return 'undated'
   const d = r.date
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
@@ -42,6 +43,20 @@ describe('parseReminder', () => {
     ['öğlen yemeğinde Ali ile buluş', '2026-09-24 12:00'],
   ])('%s -> %s', (text, want) => {
     expect(at(text)).toBe(want)
+  })
+
+  it.each([
+    ['Faturayı ödemeyi hatırlat', 'undated'],
+    ['Annemi aramayı unutma', 'undated'],
+    ['Bana ilaçları hatırlatır mısın', 'undated'],
+    ['reminder: call the bank', 'undated'],
+    ['Yarın 10:00 toplantıyı hatırlat', '2026-09-24 10:00'], // a date wins over the keyword
+  ])('reminder word: %s -> %s', (text, want) => {
+    expect(at(text)).toBe(want)
+  })
+
+  it('reports the reminder word as matched', () => {
+    expect(parseReminder('Faturayı ödemeyi hatırlat', NOW)).toEqual({ date: null, matched: 'hatırlat' })
   })
 
   it.each([

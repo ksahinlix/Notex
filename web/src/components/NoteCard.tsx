@@ -1,29 +1,39 @@
 import { useRef, useState } from 'react'
-import { Check, Clock, ImagePlus, Lock, Maximize2, MessageCircle, Minimize2, Pencil, Trash2, X } from 'lucide-react'
-import { formatDate, fromLocalInput, toLocalInput } from '../lib/format'
+import { BookOpen, Check, Clock, ImagePlus, Lock, MessageCircle, Pencil, Sparkles, Trash2, X } from 'lucide-react'
+import { formatDate } from '../lib/format'
 import { fileToDataUrl, imageFilesFrom } from '../lib/images'
 import { newId, nowIso, withImages } from '../lib/notes'
 import { blocksToText } from '../lib/paste'
 import { parsePath } from '../lib/tree'
 import type { Note, NoteContent } from '../lib/types'
-import { store } from '../state/store'
 import { confirmDialog } from '../state/confirm'
+import { store } from '../state/store'
+import NoteBody from './NoteBody'
+import ReminderPicker, { type ReminderChoice } from './ReminderPicker'
 import RichEditor, { type RichEditorHandle } from './RichEditor'
 
 interface Props {
   note: Note
   content: NoteContent | undefined
-  expanded: boolean
   pathOptionsId: string
-  onToggleExpand: () => void
+  /** Search words to highlight. */
+  terms?: string[]
+  /** Found by meaning (AI), not by the typed words. */
+  meaningMatch?: boolean
+  onOpenReader: () => void
   onSelectPath: (path: string[]) => void
   onImageClick: (src: string) => void
   onUnlock: () => void
 }
 
-export default function NoteCard({ note, content, expanded, pathOptionsId, onToggleExpand, onSelectPath, onImageClick, onUnlock }: Props) {
+/** More than a minute between creation and the last change counts as an edit. */
+const wasEdited = (n: Note) => Date.parse(n.updatedAt) - Date.parse(n.createdAt) > 60_000
+
+export default function NoteCard({ note, content, pathOptionsId, terms, meaningMatch, onOpenReader, onSelectPath, onImageClick, onUnlock }: Props) {
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState({ path: '', reminder: '' })
+  const [draftPath, setDraftPath] = useState('')
+  const [draftReminder, setDraftReminder] = useState<ReminderChoice | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [imagesLoading, setImagesLoading] = useState(false)
   const editorRef = useRef<RichEditorHandle>(null)
   const [commenting, setCommenting] = useState(false)
@@ -41,24 +51,33 @@ export default function NoteCard({ note, content, expanded, pathOptionsId, onTog
   const c = content
 
   function startEdit() {
-    setDraft({ path: note.path.join(' / '), reminder: toLocalInput(note.reminderAt) })
+    setDraftPath(note.path.join(' / '))
+    setDraftReminder(note.isReminder || note.reminderAt ? { at: note.reminderAt ? new Date(note.reminderAt) : null } : null)
+    setPickerOpen(false)
     setEditing(true)
   }
 
   async function saveEdit() {
     const blocks = editorRef.current?.getBlocks() ?? []
     const text = blocksToText(blocks)
-    const path = parsePath(draft.path)
+    const path = parsePath(draftPath)
     if ((!text && !blocks.length) || !path.length || imagesLoading) return
-    const next = { ...c, text, blocks, listItemText: note.isListItem ? text : c.listItemText }
-    const reminderAt = fromLocalInput(draft.reminder)
-    if (reminderAt && !next.reminderLabel) next.reminderLabel = text.split('\n')[0].slice(0, 80)
+    const next: NoteContent = {
+      ...c,
+      text,
+      blocks,
+      listItemText: note.isListItem ? text : c.listItemText,
+      reminderLabel: draftReminder ? c.reminderLabel || text.split('\n')[0].slice(0, 80) : null,
+    }
     setEditing(false)
-    await store.update({ ...note, path, reminderAt }, next)
+    await store.update(
+      { ...note, path, reminderAt: draftReminder?.at ? draftReminder.at.toISOString() : null, isReminder: !!draftReminder },
+      next,
+    )
   }
 
   async function askDelete() {
-    const preview = (c.listItemText || c.text || '').replace(/s+/g, ' ').trim()
+    const preview = (c.listItemText || c.text || '').replace(/\s+/g, ' ').trim()
     const ok = await confirmDialog({
       title: 'Not silinsin mi?',
       message: preview ? `“${preview.length > 90 ? preview.slice(0, 90) + '…' : preview}”` : undefined,
@@ -82,11 +101,9 @@ export default function NoteCard({ note, content, expanded, pathOptionsId, onTog
     await store.update(note, withImages(c, urls))
   }
 
-  const blocks = c.blocks?.length ? c.blocks : [{ type: 'text' as const, content: c.text }]
-
   return (
     <article
-      className={`note ${expanded ? 'expanded' : ''}`}
+      className="note"
       draggable={!editing}
       onDragStart={(e) => {
         e.dataTransfer.setData('text/notex-note', note.id)
@@ -100,10 +117,17 @@ export default function NoteCard({ note, content, expanded, pathOptionsId, onTog
           </button>
         )}
         <div className="note-main">
-          <button className="note-path link" onClick={() => onSelectPath(note.path)} title={note.path.join(' / ')}>
-            {note.path[note.path.length - 1]}
-            {note.encrypted && <Lock size={9} />}
-          </button>
+          <div className="note-top">
+            <button className="note-path link" onClick={() => onSelectPath(note.path)} title={note.path.join(' / ')}>
+              {note.path[note.path.length - 1]}
+              {note.encrypted && <Lock size={9} />}
+            </button>
+            {meaningMatch && (
+              <span className="meaning-tag" title="Aradığın kelimeler geçmiyor ama AI konuyu ilgili buldu">
+                <Sparkles size={10} /> anlamca ilgili
+              </span>
+            )}
+          </div>
 
           {editing ? (
             <div className="edit">
@@ -116,33 +140,49 @@ export default function NoteCard({ note, content, expanded, pathOptionsId, onTog
                 onBusyChange={setImagesLoading}
               />
               <div className="edit-row">
-                <input list={pathOptionsId} value={draft.path} onChange={(e) => setDraft({ ...draft, path: e.target.value })} placeholder="Kategori / Klasör / Sayfa" />
-                <input type="datetime-local" value={draft.reminder} onChange={(e) => setDraft({ ...draft, reminder: e.target.value })} title="Hatırlatma" />
+                <input list={pathOptionsId} value={draftPath} onChange={(e) => setDraftPath(e.target.value)} placeholder="Kategori / Klasör / Sayfa" />
+                <button className={`btn btn-ghost ${draftReminder ? 'on' : ''}`} title="Hatırlatma" onClick={() => setPickerOpen((o) => !o)}>
+                  <Clock size={14} />
+                </button>
               </div>
+              {draftReminder && (
+                <div className="reminder-chip">
+                  <Clock size={12} />
+                  <button className="link" title="Zamanı değiştir" onClick={() => setPickerOpen(true)}>
+                    Hatırlatma: <b>{draftReminder.at ? formatDate(draftReminder.at.toISOString()) : 'tarihsiz'}</b>
+                  </button>
+                  <button className="icon-btn" title="Hatırlatmayı kaldır" onClick={() => setDraftReminder(null)}><X size={12} /></button>
+                </div>
+              )}
+              {pickerOpen && (
+                <div className="picker-anchor">
+                  <ReminderPicker
+                    value={draftReminder?.at ?? null}
+                    onPick={(choice) => {
+                      setDraftReminder(choice)
+                      setPickerOpen(false)
+                    }}
+                    onClose={() => setPickerOpen(false)}
+                  />
+                </div>
+              )}
               <div className="edit-row">
                 <button className="btn btn-primary" onClick={saveEdit} disabled={imagesLoading}>Kaydet</button>
                 <button className="btn btn-ghost" onClick={() => setEditing(false)}>Vazgeç</button>
               </div>
             </div>
           ) : (
-            <div className={`note-body ${note.checked ? 'done' : ''}`}>
-              {note.isListItem
-                ? c.listItemText || c.text
-                : blocks.map((b, i) =>
-                    b.type === 'image' ? (
-                      <img key={i} src={b.src} alt={b.alt ?? ''} className="note-img" onClick={() => onImageClick(b.src)} />
-                    ) : (
-                      <span key={i} className="pre">{b.content}</span>
-                    ),
-                  )}
-            </div>
+            <NoteBody note={note} content={c} terms={terms} onImageClick={onImageClick} />
           )}
 
           <div className="note-meta">
             {formatDate(note.createdAt)}
-            {note.reminderAt && (
+            {wasEdited(note) && <span title={`Son düzenleme: ${formatDate(note.updatedAt)}`}>· düzenlendi {formatDate(note.updatedAt)}</span>}
+            {note.reminderAt ? (
               <span className="c-reminder"><Clock size={10} /> {formatDate(note.reminderAt)}</span>
-            )}
+            ) : note.isReminder ? (
+              <span className="c-reminder"><Clock size={10} /> hatırlatma</span>
+            ) : null}
           </div>
 
           {!!c.comments?.length && (
@@ -184,9 +224,7 @@ export default function NoteCard({ note, content, expanded, pathOptionsId, onTog
 
         {!editing && (
           <div className="note-actions">
-            <button className={`icon-btn ${expanded ? 'active' : 'hover-only'}`} title={expanded ? 'Okuma modundan çık' : 'Okuma modu'} onClick={onToggleExpand}>
-              {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-            </button>
+            <button className="icon-btn hover-only" title="Okuma modu" onClick={onOpenReader}><BookOpen size={14} /></button>
             <button className="icon-btn hover-only" title="Düzenle" onClick={startEdit}><Pencil size={14} /></button>
             <button className="icon-btn hover-only" title="Yorum ekle" onClick={() => setCommenting((v) => !v)}><MessageCircle size={14} /></button>
             <button className="icon-btn hover-only" title="Görsel ekle" onClick={() => fileRef.current?.click()}><ImagePlus size={14} /></button>

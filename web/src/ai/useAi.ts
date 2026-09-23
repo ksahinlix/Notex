@@ -67,9 +67,9 @@ export function useCategorySuggestion(text: string, enabled: boolean): CategoryS
  * Note ids matching `query` by meaning, best first, or null while unknown or
  * when AI is unavailable (the caller then shows keyword matches only).
  */
-export function useSemanticSearch(query: string): { ids: string[] | null; loading: boolean } {
+export function useSemanticSearch(query: string): { ids: string[] | null; loading: boolean; error: string } {
   const q = query.trim()
-  const [state, setState] = useState<{ q: string; ids: string[] | null }>({ q: '', ids: null })
+  const [state, setState] = useState<{ q: string; ids: string[] | null; error: string }>({ q: '', ids: null, error: '' })
   const active = !aiUnavailable && q.length >= 2
 
   useEffect(() => {
@@ -81,14 +81,16 @@ export function useSemanticSearch(query: string): { ids: string[] | null; loadin
         try {
           const ids = cached ?? (await api.search(q, ctrl.signal)).ids
           searchCache.set(q, ids)
-          setState({ q, ids })
+          setState({ q, ids, error: '' })
         } catch (e) {
           if (ctrl.signal.aborted) return
-          if ((e as { status?: number }).status === 503) aiUnavailable = true
-          setState({ q, ids: null })
+          const status = (e as { status?: number }).status
+          if (status === 503) aiUnavailable = true
+          setState({ q, ids: null, error: searchErrorText(status) })
         }
       },
-      cached ? 0 : 500,
+      // Wait until typing pauses, so "y", "ya", "yaz"... don't each cost an AI call.
+      cached ? 0 : 800,
     )
     return () => {
       clearTimeout(timer)
@@ -96,8 +98,15 @@ export function useSemanticSearch(query: string): { ids: string[] | null; loadin
     }
   }, [q, active])
 
-  if (!active) return { ids: null, loading: false }
-  return { ids: state.q === q ? state.ids : null, loading: state.q !== q }
+  if (!active) return { ids: null, loading: false, error: aiUnavailable ? searchErrorText(503) : '' }
+  const current = state.q === q
+  return { ids: current ? state.ids : null, loading: !current, error: current ? state.error : '' }
+}
+
+function searchErrorText(status?: number): string {
+  if (status === 429) return 'AI arama sınırına ulaşıldı (günlük/dakikalık); sadece kelime eşleşmeleri gösteriliyor.'
+  if (status === 503) return 'AI ayarlı değil; sadece kelime eşleşmeleri gösteriliyor.'
+  return 'AI araması şu an yanıt vermedi; sadece kelime eşleşmeleri gösteriliyor.'
 }
 
 /** Notes changed: cached search results may be outdated. */

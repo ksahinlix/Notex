@@ -1,12 +1,13 @@
 import { useMemo, useRef, useState } from 'react'
 import { Clock, ImagePlus, ListChecks, Loader2, Maximize2, Minimize2, Plus, Sparkles, X } from 'lucide-react'
 import { useCategorySuggestion } from '../ai/useAi'
-import { formatDate, fromLocalInput, toLocalInput } from '../lib/format'
+import { formatDate } from '../lib/format'
 import { imageFilesFrom } from '../lib/images'
 import { blocksToText } from '../lib/paste'
 import { parseReminder } from '../lib/reminder'
 import { parsePath } from '../lib/tree'
 import { store } from '../state/store'
+import ReminderPicker, { type ReminderChoice } from './ReminderPicker'
 import RichEditor, { type RichEditorHandle } from './RichEditor'
 
 interface Props {
@@ -23,7 +24,8 @@ type ReminderMode = 'auto' | 'manual' | 'dismissed'
 // - The server's AI (D15) proposes a folder, existing or new, plus similar
 //   existing folders as alternatives. It is only asked while the path is left
 //   to AI, so a chosen path (e.g. a locked folder) never sends the text anywhere.
-// - Dates in the text ("yarın 15:00") become a reminder automatically.
+// - Dates in the text ("yarın 15:00") and words like "hatırlat" become a
+//   reminder automatically; the clock button sets one by hand.
 // - The editor keeps pasted web content with its images, grows with the text,
 //   and has a full-screen mode for long notes.
 export default function Composer({ selectedPath, pathOptionsId }: Props) {
@@ -38,7 +40,8 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
   const [pathSource, setPathSource] = useState<PathSource>('ai')
   const [isListItem, setIsListItem] = useState(false)
   const [reminderMode, setReminderMode] = useState<ReminderMode>('auto')
-  const [manualReminder, setManualReminder] = useState('')
+  const [manualReminder, setManualReminder] = useState<ReminderChoice>({ at: null })
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -50,6 +53,10 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
     if (selectedPath) {
       setPath(selectedPath.join(' / '))
       setPathSource('selection')
+    } else if (pathSource === 'selection') {
+      // Back to "Tümü": the path came from the old selection, so let AI choose again.
+      setPath('')
+      setPathSource('ai')
     }
   }
 
@@ -64,8 +71,10 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
 
   // Reminder found in the text (recomputed only when the text changes).
   const detected = useMemo(() => parseReminder(text), [text])
-  const reminderAt =
-    reminderMode === 'manual' ? fromLocalInput(manualReminder) : reminderMode === 'auto' && detected ? detected.date.toISOString() : null
+  // The reminder that will be saved: null = none; { at: null } = without a date.
+  const reminder: ReminderChoice | null =
+    reminderMode === 'manual' ? manualReminder : reminderMode === 'auto' && detected ? { at: detected.date } : null
+  const reminderAt = reminder?.at ? reminder.at.toISOString() : null
 
   function reset() {
     setEditorKey((k) => k + 1) // fresh, empty editor
@@ -73,7 +82,8 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
     setEmpty(true)
     setIsListItem(false)
     setReminderMode('auto')
-    setManualReminder('')
+    setManualReminder({ at: null })
+    setPickerOpen(false)
     setExpanded(false)
     if (!selectedPath) {
       setPath('')
@@ -89,7 +99,6 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
     if (imagesLoading) return setError('Görseller hâlâ yükleniyor, bir saniye...')
     if (waitingForAi) return
     if (!p.length) return setError('Önce bir yol yaz: Kategori / Klasör / Sayfa')
-    if (reminderMode === 'manual' && !reminderAt) return setError('Hatırlatma için tarih ve saat seç.')
     setBusy(true)
     setError('')
     const ok = await store.create(
@@ -98,10 +107,10 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
         text: t,
         blocks,
         listItemText: isListItem ? t : null,
-        reminderLabel: reminderAt ? t.split('\n')[0].slice(0, 80) : null,
+        reminderLabel: reminder ? t.split('\n')[0].slice(0, 80) : null,
         comments: [],
       },
-      { isListItem, reminderAt },
+      { isListItem, reminderAt, isReminder: !!reminder },
     )
     setBusy(false)
     if (!ok) return setError('Şifre girilmeden bu klasöre kaydedilemez.')
@@ -126,17 +135,27 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
           onBusyChange={setImagesLoading}
         />
 
-        {(reminderAt || (reminderMode === 'manual')) && (
+        {reminder && (
           <div className="reminder-chip">
             <Clock size={12} />
-            {reminderMode === 'manual' ? (
-              <input type="datetime-local" value={manualReminder} onChange={(e) => setManualReminder(e.target.value)} />
-            ) : (
-              <span>
-                Hatırlatma: <b>{formatDate(reminderAt!)}</b> <span className="muted">(“{detected?.matched}”)</span>
-              </span>
-            )}
+            <button className="link" title="Zamanı değiştir" onClick={() => setPickerOpen(true)}>
+              {reminder.at ? <>Hatırlatma: <b>{formatDate(reminder.at.toISOString())}</b></> : <>Hatırlatma: <b>tarihsiz</b></>}
+            </button>
+            {reminderMode === 'auto' && detected && <span className="muted">(“{detected.matched}”)</span>}
             <button className="icon-btn" title="Hatırlatmayı kaldır" onClick={() => setReminderMode('dismissed')}><X size={12} /></button>
+          </div>
+        )}
+        {pickerOpen && (
+          <div className="picker-anchor">
+            <ReminderPicker
+              value={reminder?.at ?? null}
+              onPick={(choice) => {
+                setManualReminder(choice)
+                setReminderMode('manual')
+                setPickerOpen(false)
+              }}
+              onClose={() => setPickerOpen(false)}
+            />
           </div>
         )}
 
@@ -155,13 +174,9 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
             <ListChecks size={14} />
           </button>
           <button
-            className={`btn btn-ghost ${reminderMode === 'manual' ? 'on' : ''}`}
-            title="Hatırlatmayı elle ayarla"
-            onClick={() => {
-              if (reminderMode === 'manual') return setReminderMode('dismissed')
-              setManualReminder(toLocalInput(reminderAt))
-              setReminderMode('manual')
-            }}
+            className={`btn btn-ghost ${reminder ? 'on' : ''}`}
+            title="Hatırlatma ekle"
+            onClick={() => setPickerOpen((o) => !o)}
           >
             <Clock size={14} />
           </button>

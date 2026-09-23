@@ -86,3 +86,7 @@ CREATE TABLE IF NOT EXISTS ai_usage (
   calls   INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, day)
 );
+
+-- Reminders without a date ("... hatırlat" with no time given). Like
+-- reminder_at it stays in plaintext so the reminders list works while locked.
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS is_reminder BOOLEAN NOT NULL DEFAULT FALSE;

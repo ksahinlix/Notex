@@ -36,7 +36,7 @@ export function categoryUserPrompt(text, folders) {
 export const SEARCH_SYSTEM = `Kişisel notlarda arama yapıyorsun. Aşağıdaki notlardan arama sorgusuyla ANLAM olarak ilgili olanları seç (kelime geçmese de konu olarak ilgiliyse seç; alakasızları seçme). En ilgiliden başlayarak numaralarını döndür. Sadece JSON: {"ids":[numara,...]}`;
 
 export function searchUserPrompt(query, candidates) {
-  const list = candidates.map((c, i) => `${i + 1}. ${c.text.replace(/\s+/g, " ").slice(0, 200)}`).join("\n");
+  const list = candidates.map((c, i) => `${i + 1}. ${c.text.replace(/\s+/g, " ").slice(0, 400)}`).join("\n");
   return `Sorgu: ${JSON.stringify(query)}\n\nNotlar:\n${list}`;
 }
 
