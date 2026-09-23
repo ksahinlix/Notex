@@ -9,6 +9,7 @@ import { useSyncExternalStore } from 'react'
 import { api, ApiError } from '../lib/api'
 import { createProtectedFolder, unlockFolder } from '../lib/crypto'
 import { newNote, nowIso, open, seal } from '../lib/notes'
+import { folderMoveError, pathAfterFolderMove } from '../lib/move'
 import { findProtectedAncestor, pathKeyOf, pathStartsWith } from '../lib/tree'
 import type { Note, NoteContent, ProtectedFolder } from '../lib/types'
 
@@ -239,7 +240,11 @@ export class NotexStore {
 
   // ---- note actions ----
 
-  async create(path: string[], content: NoteContent, meta: { isListItem?: boolean; reminderAt?: string | null; isReminder?: boolean }): Promise<boolean> {
+  async create(
+    path: string[],
+    content: NoteContent,
+    meta: { isListItem?: boolean; reminderAt?: string | null; isReminder?: boolean; repeat?: Note['repeat'] },
+  ): Promise<boolean> {
     const { ok, key } = await this.keyForPath(path)
     if (!ok) return false
     const sealed = await seal(newNote(path, meta), content, key)
@@ -256,21 +261,116 @@ export class NotexStore {
     void this.push(sealed)
   }
 
+  /** Changes plaintext metadata only (reminder time, repeat, done), no re-encryption needed. */
+  updateMeta(note: Note, patch: Partial<Pick<Note, 'reminderAt' | 'isReminder' | 'repeat' | 'reminderDoneUntil' | 'checked'>>) {
+    const updated = { ...note, ...patch, updatedAt: nowIso() }
+    this.upsertLocal(updated, this.contentOf(note))
+    void this.push(updated)
+  }
+
+  /** ✓ on a reminder: a one-time reminder is done; a repeating one skips this occurrence. */
+  completeReminder(note: Note, occurrence: Date | null) {
+    if (note.repeat && occurrence) this.updateMeta(note, { reminderDoneUntil: occurrence.toISOString() })
+    else this.updateMeta(note, { checked: true })
+  }
+
   setChecked(note: Note, checked: boolean) {
     const updated = { ...note, checked, updatedAt: nowIso() }
     this.upsertLocal(updated, this.contentOf(note))
     void this.push(updated)
   }
 
-  async move(note: Note, newPath: string[]) {
-    if (pathKeyOf(newPath) === pathKeyOf(note.path)) return
+  /**
+   * Moves (or renames) a folder with everything in it (rule 2, lib/move.ts).
+   * - Protected folders inside it move along with their password: the key is
+   *   derived from password + salt, not from the path, so their notes keep
+   *   their cipher and need no unlocking.
+   * - Notes that enter or leave a protected folder are re-sealed, which asks
+   *   for the passwords involved.
+   * Returns { error } or { moved, merged } (merged: the destination already
+   * had notes, so an undo would not be clean).
+   */
+  async moveFolder(folder: string[], newFolder: string[]): Promise<{ error: string } | { moved: number; merged: boolean }> {
+    const error = folderMoveError(folder, newFolder)
+    if (error) return { error }
+    const { folders, notes } = this.state
+    const inBranch = (p: string[]) => pathStartsWith(p, folder)
+
+    // Protected folders inside the branch get new path keys.
+    const renamed = folders
+      .filter((f) => inBranch(f.pathKey.split('/')))
+      .map((f) => ({ old: f, next: { ...f, pathKey: pathKeyOf(pathAfterFolderMove(f.pathKey.split('/'), folder, newFolder)!) } }))
+    const others = folders.filter((f) => !renamed.some((r) => r.old === f))
+    for (const r of renamed) {
+      const rp = r.next.pathKey.split('/')
+      if (others.some((o) => pathStartsWith(rp, o.pathKey.split('/')) || pathStartsWith(o.pathKey.split('/'), rp)))
+        return { error: 'Şifreli klasörler iç içe olamaz.' }
+    }
+    const newFolders = [...others, ...renamed.map((r) => r.next)]
+    const merged = notes.some((n) => pathStartsWith(n.path, newFolder))
+
+    // Plan every note in the branch.
+    const plans = notes
+      .filter((n) => inBranch(n.path))
+      .map((n) => {
+        const newPath = pathAfterFolderMove(n.path, folder, newFolder)!
+        const oldProt = findProtectedAncestor(folders, n.path)
+        const newProt = findProtectedAncestor(newFolders, newPath)
+        const movedAlong = !!oldProt && renamed.some((r) => r.old === oldProt && r.next === newProt)
+        return { n, newPath, oldProt, newProt, reseal: !movedAlong && (oldProt || newProt) }
+      })
+
+    // Unlock what re-sealing needs (asks for passwords).
+    for (const p of plans.filter((x) => x.reseal)) {
+      for (const f of [p.oldProt, p.newProt]) {
+        if (f && !this.state.keys[f.pathKey] && !(await this.unlock(f.pathKey))) return { error: 'Şifre girilmeden taşınamaz.' }
+      }
+    }
+
+    // Save protected folders under their new keys first (the old ones are removed at the end).
+    try {
+      for (const r of renamed) await api.saveProtectedFolder(r.next)
+    } catch {
+      return { error: 'Şifreli klasör sunucuya kaydedilemedi.' }
+    }
+    const keys = { ...this.state.keys }
+    for (const r of renamed) {
+      if (keys[r.old.pathKey]) {
+        keys[r.next.pathKey] = keys[r.old.pathKey]
+        delete keys[r.old.pathKey]
+      }
+    }
+    this.set({ folders: newFolders, keys })
+
+    for (const p of plans) {
+      if (!p.reseal) {
+        const updated = { ...p.n, path: p.newPath, updatedAt: nowIso() }
+        this.upsertLocal(updated, this.contentOf(p.n))
+        void this.push(updated)
+        continue
+      }
+      const oldKey = p.oldProt ? this.state.keys[p.oldProt.pathKey] : null
+      const content = await open(p.n, oldKey)
+      const sealed = await seal({ ...p.n, path: p.newPath }, content, p.newProt ? this.state.keys[p.newProt.pathKey] : null)
+      this.upsertLocal(sealed, content)
+      void this.push(sealed)
+    }
+
+    for (const r of renamed) void api.deleteProtectedFolder(r.old.pathKey).catch(() => {})
+    return { moved: plans.length, merged }
+  }
+
+  /** Moves one note. Returns false if nothing moved (same place, locked, or password cancelled). */
+  async move(note: Note, newPath: string[]): Promise<boolean> {
+    if (pathKeyOf(newPath) === pathKeyOf(note.path)) return false
     const content = this.contentOf(note)
-    if (!content) return // locked notes can't be moved
+    if (!content) return false // locked notes can't be moved
     const { ok, key } = await this.keyForPath(newPath)
-    if (!ok) return
+    if (!ok) return false
     const sealed = await seal({ ...note, path: newPath }, content, key)
     this.upsertLocal(sealed, content)
     void this.push(sealed)
+    return true
   }
 
   remove(note: Note) {

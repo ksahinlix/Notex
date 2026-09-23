@@ -4,6 +4,7 @@ import { useCategorySuggestion } from '../ai/useAi'
 import { formatDate } from '../lib/format'
 import { imageFilesFrom } from '../lib/images'
 import { blocksToText } from '../lib/paste'
+import { repeatLabel } from '../lib/recurrence'
 import { parseReminder } from '../lib/reminder'
 import { parsePath } from '../lib/tree'
 import { store } from '../state/store'
@@ -73,7 +74,7 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
   const detected = useMemo(() => parseReminder(text), [text])
   // The reminder that will be saved: null = none; { at: null } = without a date.
   const reminder: ReminderChoice | null =
-    reminderMode === 'manual' ? manualReminder : reminderMode === 'auto' && detected ? { at: detected.date } : null
+    reminderMode === 'manual' ? manualReminder : reminderMode === 'auto' && detected ? { at: detected.date, repeat: detected.repeat ?? null } : null
   const reminderAt = reminder?.at ? reminder.at.toISOString() : null
 
   function reset() {
@@ -110,7 +111,7 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
         reminderLabel: reminder ? t.split('\n')[0].slice(0, 80) : null,
         comments: [],
       },
-      { isListItem, reminderAt, isReminder: !!reminder },
+      { isListItem, reminderAt, isReminder: !!reminder, repeat: reminder?.repeat ?? null },
     )
     setBusy(false)
     if (!ok) return setError('Şifre girilmeden bu klasöre kaydedilemez.')
@@ -139,7 +140,13 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
           <div className="reminder-chip">
             <Clock size={12} />
             <button className="link" title="Zamanı değiştir" onClick={() => setPickerOpen(true)}>
-              {reminder.at ? <>Hatırlatma: <b>{formatDate(reminder.at.toISOString())}</b></> : <>Hatırlatma: <b>tarihsiz</b></>}
+              {reminder.at && reminder.repeat ? (
+                <>Hatırlatma: <b>{repeatLabel(reminder.at, reminder.repeat)}</b></>
+              ) : reminder.at ? (
+                <>Hatırlatma: <b>{formatDate(reminder.at.toISOString())}</b></>
+              ) : (
+                <>Hatırlatma: <b>tarihsiz</b></>
+              )}
             </button>
             {reminderMode === 'auto' && detected && <span className="muted">(“{detected.matched}”)</span>}
             <button className="icon-btn" title="Hatırlatmayı kaldır" onClick={() => setReminderMode('dismissed')}><X size={12} /></button>
@@ -149,6 +156,7 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
           <div className="picker-anchor">
             <ReminderPicker
               value={reminder?.at ?? null}
+              repeat={reminder?.repeat ?? null}
               onPick={(choice) => {
                 setManualReminder(choice)
                 setReminderMode('manual')

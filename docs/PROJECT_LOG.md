@@ -765,3 +765,96 @@ when editing.
   undated reminder saved and listed, picker (no year, 1 hour default, preset,
   custom time saved), ✓ done, edit without a date field and "düzenlendi",
   delete preview intact, phone width.
+
+### 2026-09-24 — Repeating reminders, a Reminders page, better moving of notes
+**Owner requests:** repeating reminders ("Kredi kartı ekstresi her ayın 28'i"),
+the next 6 months of reminders, reminders on their own page with their own
+categories (not in the notes tree), and drag & drop "not working well".
+
+**What we did:**
+- **Repeating reminders:**
+  - New columns \`notes.reminder_repeat\` (daily/weekly/monthly/yearly,
+    counted from \`reminder_at\`) and \`notes.reminder_done_until\`.
+  - The parser understands "her ayın 28'i", "her ay 15'inde", "aylık",
+    "her pazartesi", "haftalık", "her gün / sabah / akşam", and "her yıl
+    5 Mart".
+  - \`lib/recurrence.ts\`: month ends use the last day ("her ayın 31'i" → 30th
+    or 28th), and 29 February becomes 28 February in other years.
+  - The picker gets a "Tekrar" choice.
+- **Reminders page** (\`RemindersPage.tsx\`, tabs "Notlar | Hatırlatmalar",
+  \`#hatirlatmalar\` in the URL):
+  - Categories on the left. The agenda (\`lib/agenda.ts\`) has Gecikmiş, the
+    next 6 months by month, Tarihsiz, and Tamamlananlar.
+  - Monthly and yearly reminders show every occurrence, weekly ones 4 weeks,
+    daily ones only the next.
+  - ✓ on a repeating reminder completes only that occurrence.
+  - Reminders are no longer in the notes tree or list (search still finds
+    them). The notes page shows a small "Yaklaşan" strip with a link.
+- **Moving notes:**
+  - The problems:
+    1. The whole card was draggable, so text couldn't be selected.
+    2. The drop highlight flickered, because dragleave fires over a row's
+       children.
+    3. Collapsed subfolders couldn't be targets.
+    4. Touch screens don't support HTML5 drag & drop.
+  - The fixes:
+    1. A grip handle is the only thing that drags.
+    2. Drag enter/leave are counted, so the highlight doesn't flicker.
+    3. Hovering 0.6 s opens a collapsed folder.
+    4. A new "Taşı" menu (filterable folder list, or type a new path) works
+       everywhere.
+
+**How verified:**
+- Server: 22 tests (new: repeat validation).
+- Web: 90 tests (new: recurrence 7, repeat phrases 11, agenda 5), plus
+  typecheck, lint and build.
+- Browser test (mocked API), 24 checks:
+  - Reminders are not in the tree; "her ayın 28'i" is saved as monthly and
+    shown 6 times; ✓ skips one occurrence; the category filter works;
+    switching to weekly shows 4 weeks; the page survives a reload.
+  - Text in cards is selectable; dragging by the handle opens a collapsed
+    folder and drops into it; the drag state is cleared.
+  - "Taşı" works both with a new path and with a picked folder.
+  - Phone width works.
+
+### 2026-09-24 — Moving keeps folder names; moving and renaming folders
+**Owner request:** moving an "LSA" note from "Sistem Tasarım" into
+"Yazılım" should give "Yazılım / LSA", not just "Yazılım". Discussed first.
+The owner chose: keep the note's folder by default with a one-click
+alternative, and also move and rename whole folders.
+
+**What we did:**
+- \`lib/move.ts\` (8 tests):
+  - Rule 1: a moved note keeps its last folder name (no "LSA / LSA"; a
+    one-level note goes to the target).
+  - Rule 2: a folder moves with its whole branch; renaming is a move to the
+    same parent; a folder can't move into itself.
+- Note moves (drag onto the tree, or "Taşı" → pick a folder) follow rule 1.
+  A typed path in "Taşı" is used exactly. A toast offers "Sadece X içine koy"
+  and "Geri al".
+- Folders: drag a folder's name onto another folder (or onto "Tümü" for the
+  top level), or use "⋯" → "Yeniden adlandır" / "Taşı…". The toast shows how
+  many notes moved, with "Geri al" unless the move merged into an existing
+  folder.
+- \`store.moveFolder\` handles protected folders:
+  - A protected folder moves with its password. Its notes keep their cipher,
+    because the key comes from password + salt, not the path. Its record is
+    saved under the new path, then the old one is deleted.
+  - Notes entering or leaving a protected folder are re-encrypted after
+    asking for the password.
+  - Nesting protected folders is refused, and a cancelled password changes
+    nothing.
+- "düzenlendi" now comes from \`content.editedAt\`, set only when the text
+  changes. Moving a note no longer marks it as edited.
+
+**How verified:**
+- Web: 104 tests (new: move rules 8; store.moveFolder 6, with real
+  encryption: plain branch, merge, into itself, protected folder moves with
+  its password, a note entering protection gets encrypted, nesting and
+  cancelled password).
+- Browser, 15 checks: folder drag and undo, note drag → "Yazılım / LSA" →
+  "Sadece Yazılım içine koy", "Taşı" pick and undo, typed exact path, rename,
+  "En üst seviye", folder dropped on "Tümü", menu excludes self and
+  subfolders.
+- The earlier browser tests (24 + 24 checks) pass after updating them for
+  this batch's intended changes.
