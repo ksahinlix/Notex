@@ -1,18 +1,23 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { clearAiCaches } from './ai/useAi'
 import NotesPage from './components/NotesPage'
-import { api, ApiError, UNAUTHORIZED_EVENT } from './lib/api'
+import { api, ApiError, UNAUTHORIZED_EVENT, type User } from './lib/api'
+import { googleSignedOut, loadGoogleIdentity } from './lib/google'
 import { store } from './state/store'
 
-type Status = 'loading' | 'loggedOut' | 'loggedIn'
+type Status = { state: 'loading' } | { state: 'loggedOut' } | { state: 'loggedIn'; user: User }
 
 export default function App() {
-  const [status, setStatus] = useState<Status>('loading')
+  const [status, setStatus] = useState<Status>({ state: 'loading' })
 
   useEffect(() => {
-    api.me().then((r) => setStatus(r.authenticated ? 'loggedIn' : 'loggedOut')).catch(() => setStatus('loggedOut'))
+    api
+      .me()
+      .then((r) => setStatus(r.authenticated && r.user ? { state: 'loggedIn', user: r.user } : { state: 'loggedOut' }))
+      .catch(() => setStatus({ state: 'loggedOut' }))
     const onExpired = () => {
-      store.reset()
-      setStatus('loggedOut')
+      forgetEverything()
+      setStatus({ state: 'loggedOut' })
     }
     window.addEventListener(UNAUTHORIZED_EVENT, onExpired)
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, onExpired)
@@ -20,42 +25,71 @@ export default function App() {
 
   async function logout() {
     await api.logout().catch(() => {})
-    store.reset() // drop notes and folder keys from memory
-    setStatus('loggedOut')
+    googleSignedOut()
+    forgetEverything()
+    setStatus({ state: 'loggedOut' })
   }
 
-  if (status === 'loading') return <main className="center muted">Yükleniyor...</main>
-  if (status === 'loggedOut') return <Login onSuccess={() => setStatus('loggedIn')} />
-  return <NotesPage onLogout={logout} />
+  if (status.state === 'loading') return <main className="center muted">Yükleniyor...</main>
+  if (status.state === 'loggedOut') return <Login onSuccess={(user) => setStatus({ state: 'loggedIn', user })} />
+  return <NotesPage user={status.user} onLogout={logout} />
 }
 
-function Login({ onSuccess }: { onSuccess: () => void }) {
-  const [password, setPassword] = useState('')
+/** Drops the previous user's notes, folder keys and AI answers from memory. */
+function forgetEverything() {
+  store.reset()
+  clearAiCaches()
+}
+
+function Login({ onSuccess }: { onSuccess: (user: User) => void }) {
+  const buttonRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    setBusy(true)
-    setError('')
-    try {
-      await api.login(password)
-      onSuccess()
-    } catch (err) {
-      setError(err instanceof ApiError && err.status === 429 ? 'Çok fazla deneme. Biraz bekle.' : 'Şifre yanlış.')
-    } finally {
-      setBusy(false)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { googleClientId } = await api.authConfig()
+        if (!googleClientId) return setError('Google ile giriş henüz ayarlanmadı (GOOGLE_CLIENT_ID).')
+        const gis = await loadGoogleIdentity()
+        if (cancelled || !buttonRef.current) return
+        gis.initialize({
+          client_id: googleClientId,
+          use_fedcm_for_prompt: true,
+          callback: async ({ credential }) => {
+            setBusy(true)
+            setError('')
+            try {
+              onSuccess((await api.loginGoogle(credential)).user)
+            } catch (err) {
+              setError(err instanceof ApiError && err.status === 429 ? 'Çok fazla deneme. Biraz bekle.' : 'Google ile giriş yapılamadı. Tekrar dene.')
+            } finally {
+              setBusy(false)
+            }
+          },
+        })
+        gis.renderButton(buttonRef.current, { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', locale: 'tr', width: 260 })
+      } catch {
+        if (!cancelled) setError('Google girişi yüklenemedi. İnternet bağlantını kontrol et.')
+      }
+    })()
+    return () => {
+      cancelled = true
     }
-  }
+    // Set up Google's button once; onSuccess only moves the app to the notes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <main className="center">
-      <form className="card login" onSubmit={submit}>
+      <div className="card login">
         <h1>Notex</h1>
-        <input type="password" autoFocus placeholder="Şifre" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <p className="muted login-text">Notlarını yaz; yapay zekâ onları klasörlere ayırsın.</p>
+        <div ref={buttonRef} className="google-button" />
+        {busy && <div className="muted">Giriş yapılıyor...</div>}
         {error && <div className="error">{error}</div>}
-        <button className="btn btn-primary" disabled={!password || busy}>Giriş</button>
-      </form>
+      </div>
     </main>
   )
 }

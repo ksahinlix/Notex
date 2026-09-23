@@ -53,7 +53,9 @@ Fill in `server/.env`:
 |----------|---------------|
 | `DATABASE_URL` | Neon dashboard → your project → **Connect** → use the copy button (the password is hidden as `****` on screen). Change `sslmode=require` to `sslmode=verify-full` to silence a warning from `pg`. |
 | `SESSION_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
-| `APP_PASSWORD_HASH` | `node scripts/hash-password.js 'your password'`, then paste the output in **single quotes** |
+| `GOOGLE_CLIENT_ID` | Google sign-in: see **Google login setup** below |
+| `OWNER_EMAIL` | Your Google email. Your first sign-in takes over notes created before multi-user login |
+| `AI_DAILY_LIMIT` | Optional: AI requests per user per day (default 150) |
 | `CLOUDFLARE_ACCOUNT_ID` | Optional (AI). The 32 characters in the dashboard URL: `dash.cloudflare.com/<account id>/home` |
 | `CLOUDFLARE_API_TOKEN` | Optional (AI). My Profile → API Tokens → **Workers AI** template; under *Account Resources* include your account |
 
@@ -76,7 +78,26 @@ npm install
 npm run dev       # http://localhost:5173 (API calls are proxied to :8000)
 ```
 
-Log in with the password you hashed above.
+Sign in with Google.
+
+## Google login setup
+
+Notex signs users in with Google (anyone with a Google account can sign up).
+One-time setup, free:
+
+1. Open <https://console.cloud.google.com>, create a project (e.g. "Notex").
+2. **APIs & Services → OAuth consent screen**: choose **External**. Enter the
+   app name and your email, then save. Under **Audience**, click **Publish app**
+   so any Google account can sign in. The basic profile/email scopes need no
+   review.
+3. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
+   - Application type: **Web application**
+   - **Authorized JavaScript origins**: `https://notex-r2zk.onrender.com`
+     and `http://localhost:5173`
+   - No redirect URI is needed.
+4. Copy the **Client ID** (`…apps.googleusercontent.com`, not secret) into
+   `GOOGLE_CLIENT_ID` (in `server/.env` and Render). Put your Google email
+   in `OWNER_EMAIL`.
 
 ## Tests
 
@@ -94,8 +115,8 @@ database instead, put `TEST_DATABASE_URL=...` in `server/.env.test`.
 
 1. Push this repository to GitHub.
 2. In Render: **New → Blueprint**, then pick the repo. Render reads `render.yaml`.
-3. When asked, set `DATABASE_URL` (Neon), `APP_PASSWORD_HASH` and, for AI,
-   `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
+3. When asked, set `DATABASE_URL` (Neon), `GOOGLE_CLIENT_ID`, `OWNER_EMAIL`
+   and, for AI, `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
    `SESSION_SECRET` is generated automatically.
 4. Open the service URL and log in. The schema is applied on each start.
 

@@ -11,11 +11,12 @@ function toApi(row) {
   };
 }
 
+// All routes are per user: req.userId is set by requireAuth.
 export function protectedFoldersRouter(pool) {
   const r = Router();
 
-  r.get("/", async (_req, res) => {
-    const { rows } = await pool.query("SELECT * FROM protected_folders WHERE deleted_at IS NULL ORDER BY path_key");
+  r.get("/", async (req, res) => {
+    const { rows } = await pool.query("SELECT * FROM protected_folders WHERE user_id = $1 AND deleted_at IS NULL ORDER BY path_key", [req.userId]);
     res.json({ folders: rows.map(toApi) });
   });
 
@@ -26,21 +27,21 @@ export function protectedFoldersRouter(pool) {
     if (!Number.isInteger(iterations) || iterations < 100_000) return res.status(400).json({ error: "invalid iterations" });
     if (typeof checkCipher !== "string" || !checkCipher.includes(":")) return res.status(400).json({ error: "invalid checkCipher" });
     const { rows } = await pool.query(
-      `INSERT INTO protected_folders (path_key, salt, iterations, check_cipher)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (path_key) DO UPDATE SET
+      `INSERT INTO protected_folders (user_id, path_key, salt, iterations, check_cipher)
+       VALUES ($5, $1, $2, $3, $4)
+       ON CONFLICT (user_id, path_key) DO UPDATE SET
          salt = EXCLUDED.salt, iterations = EXCLUDED.iterations, check_cipher = EXCLUDED.check_cipher,
          updated_at = now(), deleted_at = NULL
        RETURNING *`,
-      [req.params.pathKey, salt, iterations, checkCipher],
+      [req.params.pathKey, salt, iterations, checkCipher, req.userId],
     );
     res.json(toApi(rows[0]));
   });
 
   r.delete("/:pathKey", async (req, res) => {
     const { rowCount } = await pool.query(
-      "UPDATE protected_folders SET deleted_at = now(), updated_at = now() WHERE path_key = $1 AND deleted_at IS NULL",
-      [req.params.pathKey],
+      "UPDATE protected_folders SET deleted_at = now(), updated_at = now() WHERE user_id = $2 AND path_key = $1 AND deleted_at IS NULL",
+      [req.params.pathKey, req.userId],
     );
     res.status(rowCount ? 204 : 404).end();
   });

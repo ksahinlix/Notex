@@ -38,8 +38,10 @@ async function request<T>(method: string, path: string, body?: unknown, signal?:
 export const api = {
   health: () => request<{ ok: boolean; db: string }>('GET', '/api/health'),
 
-  me: () => request<{ authenticated: boolean }>('GET', '/api/auth/me'),
-  login: (password: string) => request<{ ok: true }>('POST', '/api/auth/login', { password }),
+  me: () => request<{ authenticated: boolean; user?: User }>('GET', '/api/auth/me'),
+  authConfig: () => request<{ googleClientId: string | null }>('GET', '/api/auth/config'),
+  /** Signs in (or up) with the ID token from Google's button. */
+  loginGoogle: (credential: string) => request<{ user: User }>('POST', '/api/auth/google', { credential }),
   logout: () => request<{ ok: true }>('POST', '/api/auth/logout'),
 
   /** Without `since`: all live notes. With `since`: all changes after it, including deletions. */
@@ -58,6 +60,13 @@ export const api = {
   classify: (text: string, signal?: AbortSignal) => request<Classification>('POST', '/api/ai/classify', { text }, signal),
   search: (q: string, signal?: AbortSignal) =>
     request<{ ids: string[]; reranked: boolean }>('GET', `/api/ai/search?q=${encodeURIComponent(q)}`, undefined, signal),
+}
+
+export interface User {
+  id: string
+  email: string
+  name: string | null
+  picture: string | null
 }
 
 export interface Classification {

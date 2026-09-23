@@ -1,5 +1,6 @@
 // AI features on the server (D15): folder suggestions and search by meaning.
-// Only notes that are NOT encrypted are ever sent to the AI or get vectors.
+// Only notes that are NOT encrypted are ever sent to the AI or get vectors,
+// and every query is limited to one user's notes (D16).
 import crypto from "node:crypto";
 import { AiError, MODELS } from "./cloudflare.js";
 import { CATEGORY_SYSTEM, SEARCH_SYSTEM, categoryUserPrompt, cleanPath, searchUserPrompt } from "./prompts.js";
@@ -22,19 +23,23 @@ export function vectorText(path, content) {
 const hashOf = (s) => crypto.createHash("sha256").update(s).digest("hex");
 
 export function createAiService({ pool, ai }) {
-  let syncing = null;
+  const syncing = new Map(); // userId -> running sync
 
-  /** Brings note_vectors up to date with the plain notes (lazily, on use). */
-  function syncVectors() {
-    syncing ??= (async () => {
+  /** Brings a user's note_vectors up to date with their plain notes (lazily, on use). */
+  function syncVectors(userId) {
+    if (syncing.has(userId)) return syncing.get(userId);
+    const job = (async () => {
       try {
         await pool.query(
-          `DELETE FROM note_vectors v USING notes n WHERE v.note_id = n.id AND (n.encrypted OR n.deleted_at IS NOT NULL)`,
+          `DELETE FROM note_vectors v USING notes n
+           WHERE v.note_id = n.id AND n.user_id = $1 AND (n.encrypted OR n.deleted_at IS NOT NULL)`,
+          [userId],
         );
         const { rows } = await pool.query(
           `SELECT n.id, n.path, n.content, v.text_hash FROM notes n
            LEFT JOIN note_vectors v ON v.note_id = n.id
-           WHERE n.deleted_at IS NULL AND NOT n.encrypted`,
+           WHERE n.user_id = $1 AND n.deleted_at IS NULL AND NOT n.encrypted`,
+          [userId],
         );
         const stale = rows
           .map((r) => ({ id: r.id, text: vectorText(r.path, r.content), old: r.text_hash }))
@@ -51,18 +56,20 @@ export function createAiService({ pool, ai }) {
           );
         }
       } finally {
-        syncing = null;
+        syncing.delete(userId);
       }
     })();
-    return syncing;
+    syncing.set(userId, job);
+    return job;
   }
 
   /** Plain notes ranked by similarity to `vec` (best first). */
-  async function nearest(vec, limit) {
+  async function nearest(userId, vec, limit) {
     const { rows } = await pool.query(
       `SELECT n.id, n.path, n.content, v.vector FROM note_vectors v
        JOIN notes n ON n.id = v.note_id
-       WHERE n.deleted_at IS NULL AND NOT n.encrypted`,
+       WHERE n.user_id = $1 AND n.deleted_at IS NULL AND NOT n.encrypted`,
+      [userId],
     );
     return rows
       .map((r) => ({ id: r.id, path: r.path, content: r.content, score: dot(vec, r.vector) }))
@@ -70,9 +77,10 @@ export function createAiService({ pool, ai }) {
       .slice(0, limit);
   }
 
-  async function existingFolders() {
+  async function existingFolders(userId) {
     const { rows } = await pool.query(
-      `SELECT path, count(*)::int AS n FROM notes WHERE deleted_at IS NULL GROUP BY path ORDER BY n DESC, path`,
+      `SELECT path, count(*)::int AS n FROM notes WHERE user_id = $1 AND deleted_at IS NULL GROUP BY path ORDER BY n DESC, path`,
+      [userId],
     );
     return rows.map((r) => r.path);
   }
@@ -82,8 +90,8 @@ export function createAiService({ pool, ai }) {
      * A folder for new note text: the language model's pick (existing or new),
      * plus up to 3 existing folders whose notes are most similar.
      */
-    async classify(text) {
-      const folders = await existingFolders();
+    async classify(userId, text) {
+      const folders = await existingFolders(userId);
       const user = categoryUserPrompt(text, folders);
 
       const pickFolder = async () => {
@@ -100,11 +108,11 @@ export function createAiService({ pool, ai }) {
       };
       const similarFolders = async () => {
         try {
-          await syncVectors();
+          await syncVectors(userId);
           const [vec] = await ai.embed([text.slice(0, 1500)]);
           const seen = new Set();
           const out = [];
-          for (const n of await nearest(vec, 30)) {
+          for (const n of await nearest(userId, vec, 30)) {
             const key = n.path.join("/");
             if (!seen.has(key)) {
               seen.add(key);
@@ -131,10 +139,10 @@ export function createAiService({ pool, ai }) {
      * Notes matching `query` by meaning: the 20 closest by vector, then the
      * language model keeps the relevant ones, best first. Returns note ids.
      */
-    async search(query) {
-      await syncVectors();
+    async search(userId, query) {
+      await syncVectors(userId);
       const [vec] = await ai.embed([query]);
-      const shortlist = (await nearest(vec, SHORTLIST)).map((n) => ({ id: n.id, text: vectorText(n.path, n.content), score: n.score }));
+      const shortlist = (await nearest(userId, vec, SHORTLIST)).map((n) => ({ id: n.id, text: vectorText(n.path, n.content), score: n.score }));
       if (!shortlist.length) return { ids: [], reranked: false };
       try {
         const { ids } = await ai.chatJson(MODELS.rerank, SEARCH_SYSTEM, searchUserPrompt(query, shortlist), { maxTokens: 200 });

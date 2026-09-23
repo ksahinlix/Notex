@@ -39,7 +39,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D4 | Backend: Node.js + Express, handles storage/auth only | Active |
 | D5 | Database: Postgres on Neon (free tier) | Active |
 | D6 | Hosting: one Render web service serves both API and web app | Active |
-| D7 | Single-user login: password hash in env var + signed cookie | Active |
+| D7 | Single-user login: password hash in env var + signed cookie | Superseded by D16 |
 | D8 | Folder encryption: AES-GCM in the browser, no password hash stored | Active |
 | D9 | Sync model: client-generated IDs, last-write-wins, soft deletes | Active |
 | D10 | Web stack: Vite + React + TypeScript; server in plain JavaScript | Active |
@@ -47,6 +47,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D12 | Embedding model: multilingual-e5-small, opt-in, in a Web Worker | Superseded by D15 |
 | D13 | Category model: Gemma-2-2B via WebLLM (WebGPU) creates folders itself | Superseded by D15 (prompt kept) |
 | D15 | AI runs on the server via Cloudflare Workers AI (free tier) | Active |
+| D16 | Multiple users, "Sign in with Google" only, open sign-up with per-user limits | Active |
 | D14 | Reminders are detected from text by a rule-based Turkish parser | Active |
 
 ### D1 — Start from scratch
@@ -330,6 +331,43 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 - **Revisit when:** the free allowance isn't enough, or a better model appears
   in Workers AI. Re-run the eval scripts. Groq's free tier is a possible
   second provider.
+
+### D16 — Multiple users with Google sign-in
+- **Supersedes** D7 (single password).
+- **Owner's choices:** anyone with a Google account can sign up, and Google
+  replaces the password login.
+- **What:**
+  - **Login:** Google Identity Services shows the "Sign in with Google"
+    button (`web/src/lib/google.ts`). The browser posts the Google ID token to
+    `POST /api/auth/google`. The server verifies it with
+    `google-auth-library` against `GOOGLE_CLIENT_ID`, accepts only verified
+    emails, then finds or creates the user (`server/src/users.js`) and sets
+    the same signed, httpOnly, SameSite=Strict cookie as before, now carrying
+    the user id. `GET /api/auth/config` gives the browser the client ID;
+    `/api/auth/me` returns name, email and photo.
+  - **Data:** the `users` table. `notes.user_id` and
+    `protected_folders.user_id` are set, and every query is limited to the
+    signed-in user. Protected folder names are unique per user (two users can
+    both lock "Kişisel"). A note id that belongs to someone else can't be
+    overwritten (403). Folder encryption is unchanged, since keys never leave
+    the browser.
+  - **Migration:** existing rows had no owner. The first sign-in with
+    `OWNER_EMAIL` takes them over. Nobody else ever sees them.
+  - **Limits, because sign-up is open and everyone shares the free tiers:**
+    - AI: `AI_DAILY_LIMIT` requests per user per day (default 150), in the
+      `ai_usage` table, plus 40/min. Invalid requests don't count.
+    - Storage: 50 MB of note content per user (inline images included); Neon's
+      free tier is 0.5 GB in total.
+  - AI only sees the signed-in user's notes and folders (`service.js`).
+- **Why Google only:** there is no password to store, leak or forget, and no
+  e-mail verification or reset flow to build. The owner uses Google anyway.
+- **Setup:** a free Google Cloud project with an OAuth client of type "Web
+  application". Its JavaScript origins are the Render URL and
+  `http://localhost:5173` (see README). Then set `GOOGLE_CLIENT_ID` and
+  `OWNER_EMAIL` in `server/.env` and Render. `APP_PASSWORD_HASH` is no longer
+  used.
+- **Revisit when:** there are many users (per-user limits may need an admin
+  view), or someone without a Google account needs access.
 
 ---
 
@@ -652,3 +690,28 @@ is sent there before a note is locked.
 **Next:** add the two Cloudflare values in Render, then deploy. Later: learn
 from the owner's folder corrections (a misfile fixed once shouldn't repeat),
 and reminder notifications.
+
+### 2026-09-23 — In-app dialogs; Google login with multiple users (D16)
+**What:**
+- Deleting a note now asks with an in-app dialog (`ConfirmDialog`, the note's
+  text as preview, red "Sil", Esc/Vazgeç cancels) instead of the browser's
+  popup.
+- Google sign-in for everyone, with per-user data (D16). The password login
+  and `hash-password` script are removed.
+
+**How verified:**
+- Server: 20 tests, including:
+  - Google login with forged tokens rejected.
+  - The owner takes over the old notes; a stranger doesn't.
+  - Users can't see, overwrite or delete each other's notes or folders.
+  - The same folder name can be locked by two users.
+  - The storage quota; AI seeing only the user's own notes; the daily AI
+    limit.
+- Web: 54 tests, plus typecheck, lint and build.
+- Browser test with a fake Google script: login screen, credential posted,
+  user shown in the header, delete dialog (Esc cancels, Sil deletes, no
+  browser popup), and logout (Google auto sign-in disabled).
+
+**Next:** the owner creates the Google OAuth client and sets `GOOGLE_CLIENT_ID`
+and `OWNER_EMAIL` locally and in Render, then we deploy. The server doesn't
+start without `GOOGLE_CLIENT_ID`, so the variables must be set first.

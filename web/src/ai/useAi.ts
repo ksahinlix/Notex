@@ -104,3 +104,10 @@ export function useSemanticSearch(query: string): { ids: string[] | null; loadin
 export function clearSearchCache() {
   searchCache.clear()
 }
+
+/** Logout: forget everything cached for the previous user. */
+export function clearAiCaches() {
+  classifyCache.clear()
+  searchCache.clear()
+  aiUnavailable = false
+}

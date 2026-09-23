@@ -1,7 +1,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createApp } from "../src/app.js";
-import { COOKIE_NAME, createSessionToken, hashPassword } from "../src/auth.js";
+import { COOKIE_NAME, createSessionToken } from "../src/auth.js";
 import { AiError, MODELS, extractJson } from "../src/ai/cloudflare.js";
 import { cleanPath, categoryUserPrompt } from "../src/ai/prompts.js";
 import { createAiService } from "../src/ai/service.js";
@@ -59,22 +59,24 @@ const fakeAi = {
   },
 };
 
-let db, server, base, cookie;
+let db, server, base, cookie, otherCookie;
 function note(id, path, text, extra = {}) {
   const now = new Date().toISOString();
   return { id, path, encrypted: false, content: { text }, cipher: null, isListItem: false, checked: false, reminderAt: null, createdAt: now, updatedAt: now, ...extra };
 }
-const api = async (method, url, body, auth = true) => {
-  const res = await fetch(base + url, { method, headers: { "content-type": "application/json", ...(auth ? { cookie } : {}) }, body: body && JSON.stringify(body) });
+const api = async (method, url, body, auth = true, as = cookie) => {
+  const res = await fetch(base + url, { method, headers: { "content-type": "application/json", ...(auth ? { cookie: as } : {}) }, body: body && JSON.stringify(body) });
   return { status: res.status, body: await res.json().catch(() => null) };
 };
 
 before(async () => {
   db = await startTestDb();
   const aiService = createAiService({ pool: db.pool, ai: fakeAi });
-  server = createApp({ pool: db.pool, sessionSecret: "s", passwordHash: await hashPassword("pw"), aiService }).listen(0);
+  server = createApp({ pool: db.pool, sessionSecret: "s", aiService, aiDailyLimit: 12 }).listen(0);
   base = `http://localhost:${server.address().port}`;
-  cookie = `${COOKIE_NAME}=${createSessionToken("s")}`;
+  await db.pool.query(`INSERT INTO users (id, google_sub, email) VALUES ('u1', 'g1', 'u1@x.com'), ('u2', 'g2', 'u2@x.com')`);
+  cookie = `${COOKIE_NAME}=${createSessionToken("s", "u1")}`;
+  otherCookie = `${COOKIE_NAME}=${createSessionToken("s", "u2")}`;
   for (const n of [
     note("n1", ["Eğlence", "İzlenecekler"], "Inception filmi"),
     note("n2", ["Eğlence", "İzlenecekler"], "Breaking Bad dizisi"),
@@ -139,8 +141,28 @@ test("vectors follow edits; search re-ranks by meaning", async () => {
 });
 
 test("without Cloudflare configured the AI routes answer 503", async () => {
-  const s = createApp({ pool: db.pool, sessionSecret: "s", passwordHash: "x" }).listen(0);
+  const s = createApp({ pool: db.pool, sessionSecret: "s" }).listen(0);
   const res = await fetch(`http://localhost:${s.address().port}/api/ai/search?q=film`, { headers: { cookie } });
   s.close();
   assert.equal(res.status, 503);
+});
+
+test("AI only sees the signed-in user's notes", async () => {
+  const r = await api("GET", "/api/ai/search?q=film", undefined, true, otherCookie);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.ids, []); // u2 has no notes; u1's films are not visible
+  const c = await api("POST", "/api/ai/classify", { text: "Dune filmini izle" }, true, otherCookie);
+  assert.equal(c.body.isNew, true); // u1's "Eğlence / İzlenecekler" is not u2's folder
+  assert.deepEqual(c.body.alternatives, []);
+  assert.match(calls.chat.filter((x) => x.user.includes("Dune")).at(-1).user, /(yok)/);
+});
+
+test("daily AI limit per user", async () => {
+  let last;
+  for (let i = 0; i < 12; i++) last = await api("GET", "/api/ai/search?q=film", undefined, true, otherCookie);
+  assert.equal(last.status, 429);
+  assert.equal(last.body.error, "daily AI limit reached");
+  // invalid requests don't count, and other users are unaffected
+  assert.equal((await api("GET", "/api/ai/search?q=a", undefined, true, otherCookie)).status, 400);
+  assert.equal((await api("GET", "/api/ai/search?q=film")).status, 200);
 });

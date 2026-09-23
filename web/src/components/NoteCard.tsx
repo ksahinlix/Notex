@@ -7,6 +7,7 @@ import { blocksToText } from '../lib/paste'
 import { parsePath } from '../lib/tree'
 import type { Note, NoteContent } from '../lib/types'
 import { store } from '../state/store'
+import { confirmDialog } from '../state/confirm'
 import RichEditor, { type RichEditorHandle } from './RichEditor'
 
 interface Props {
@@ -54,6 +55,17 @@ export default function NoteCard({ note, content, expanded, pathOptionsId, onTog
     if (reminderAt && !next.reminderLabel) next.reminderLabel = text.split('\n')[0].slice(0, 80)
     setEditing(false)
     await store.update({ ...note, path, reminderAt }, next)
+  }
+
+  async function askDelete() {
+    const preview = (c.listItemText || c.text || '').replace(/s+/g, ' ').trim()
+    const ok = await confirmDialog({
+      title: 'Not silinsin mi?',
+      message: preview ? `“${preview.length > 90 ? preview.slice(0, 90) + '…' : preview}”` : undefined,
+      confirmLabel: 'Sil',
+      danger: true,
+    })
+    if (ok) store.remove(note)
   }
 
   async function addComment() {
@@ -178,7 +190,7 @@ export default function NoteCard({ note, content, expanded, pathOptionsId, onTog
             <button className="icon-btn hover-only" title="Düzenle" onClick={startEdit}><Pencil size={14} /></button>
             <button className="icon-btn hover-only" title="Yorum ekle" onClick={() => setCommenting((v) => !v)}><MessageCircle size={14} /></button>
             <button className="icon-btn hover-only" title="Görsel ekle" onClick={() => fileRef.current?.click()}><ImagePlus size={14} /></button>
-            <button className="icon-btn hover-only danger" title="Sil" onClick={() => confirm('Bu not silinsin mi?') && store.remove(note)}><Trash2 size={14} /></button>
+            <button className="icon-btn hover-only danger" title="Sil" onClick={() => void askDelete()}><Trash2 size={14} /></button>
             <input
               ref={fileRef}
               type="file"
