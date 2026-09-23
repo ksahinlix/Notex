@@ -221,3 +221,19 @@ textarea {
 
 /* Images inside notes: their own block (suits pasted web content). */
 .note-body .note-img { display: block; }
+
+/* ---- confirm dialog ---- */
+.confirm-message { font-size: 13px; color: var(--text-muted); line-height: 1.5; overflow-wrap: anywhere; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { filter: brightness(1.08); }
+
+/* ---- Google login & user ---- */
+.login { align-items: center; text-align: center; gap: 14px; padding: 28px 24px; }
+.login h1 { font-size: 20px; }
+.login-text { margin: 0; }
+.google-button { min-height: 44px; display: flex; justify-content: center; }
+.user-chip { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); max-width: 220px; }
+.user-chip img, .user-initial { width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0; }
+.user-initial { display: inline-flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 12px; }
+.user-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 480px) { .user-name { display: none; } }

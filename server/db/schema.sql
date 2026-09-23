@@ -56,3 +56,33 @@ CREATE TABLE IF NOT EXISTS note_vectors (
   vector     REAL[]      NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ---- Multiple users with Google login (D16) ----------------------------
+
+CREATE TABLE IF NOT EXISTS users (
+  id            TEXT PRIMARY KEY,            -- random UUID
+  google_sub    TEXT UNIQUE NOT NULL,        -- Google's stable account id
+  email         TEXT NOT NULL,
+  name          TEXT,
+  picture       TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_login_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Every note and protected folder belongs to a user. Rows from the
+-- single-user era have NULL here until OWNER_EMAIL signs in and claims them.
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id);
+CREATE INDEX IF NOT EXISTS notes_user_updated_idx ON notes (user_id, updated_at);
+
+ALTER TABLE protected_folders ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id);
+-- Folder names are only unique per user now ("Kişisel" can exist for everyone).
+ALTER TABLE protected_folders DROP CONSTRAINT IF EXISTS protected_folders_pkey;
+CREATE UNIQUE INDEX IF NOT EXISTS protected_folders_user_path_idx ON protected_folders (user_id, path_key);
+
+-- AI requests per user per day, to share the free Cloudflare allowance fairly.
+CREATE TABLE IF NOT EXISTS ai_usage (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  day     DATE NOT NULL,
+  calls   INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, day)
+);

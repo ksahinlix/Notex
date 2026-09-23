@@ -1,77 +1,78 @@
-// Single-user authentication.
+// Authentication (D16): "Sign in with Google", multiple users.
 //
-// - The owner's password is stored only as a scrypt hash in APP_PASSWORD_HASH
-//   (generate it with `npm run hash-password`).
+// - The browser gets a Google ID token (a signed JWT) from Google's button and
+//   posts it to /api/auth/google. We verify it with Google's library against
+//   our OAuth client ID, then find or create the user.
 // - A successful login sets an httpOnly cookie holding a signed, expiring
-//   token. The signature (HMAC-SHA256 with SESSION_SECRET) means the server
+//   token with the user's id (HMAC-SHA256 with SESSION_SECRET), so the server
 //   needs no session table.
 import crypto from "node:crypto";
-import { promisify } from "node:util";
-
-const scrypt = promisify(crypto.scrypt);
+import { OAuth2Client } from "google-auth-library";
 
 export const COOKIE_NAME = "notex_session";
 const SESSION_DAYS = 30;
-const KEY_LEN = 64;
-const SCRYPT_N = 2 ** 15;
-const SCRYPT_OPTS = { N: SCRYPT_N, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
-
-// Format: scrypt$<N>$<saltHex>$<hashHex>
-export async function hashPassword(password) {
-  const salt = crypto.randomBytes(16);
-  const hash = await scrypt(password, salt, KEY_LEN, SCRYPT_OPTS);
-  return `scrypt$${SCRYPT_N}$${salt.toString("hex")}$${hash.toString("hex")}`;
-}
-
-export async function verifyPassword(password, stored) {
-  const [scheme, n, saltHex, hashHex] = (stored || "").split("$");
-  if (scheme !== "scrypt" || !saltHex || !hashHex) return false;
-  const expected = Buffer.from(hashHex, "hex");
-  const actual = await scrypt(password, Buffer.from(saltHex, "hex"), expected.length, { ...SCRYPT_OPTS, N: Number(n) });
-  return crypto.timingSafeEqual(actual, expected);
-}
 
 function sign(payload, secret) {
   return crypto.createHmac("sha256", secret).update(payload).digest("base64url");
 }
 
-export function createSessionToken(secret, now = Date.now()) {
-  const payload = Buffer.from(JSON.stringify({ exp: now + SESSION_DAYS * 86400_000 })).toString("base64url");
+export function createSessionToken(secret, userId, now = Date.now()) {
+  const payload = Buffer.from(JSON.stringify({ uid: userId, exp: now + SESSION_DAYS * 86400_000 })).toString("base64url");
   return `${payload}.${sign(payload, secret)}`;
 }
 
+/** The user id in a valid, unexpired token; otherwise null. */
 export function verifySessionToken(token, secret, now = Date.now()) {
-  if (typeof token !== "string") return false;
+  if (typeof token !== "string") return null;
   const [payload, sig] = token.split(".");
-  if (!payload || !sig) return false;
+  if (!payload || !sig) return null;
   const expected = Buffer.from(sign(payload, secret));
   const actual = Buffer.from(sig);
-  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return false;
+  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
   try {
-    const { exp } = JSON.parse(Buffer.from(payload, "base64url").toString());
-    return typeof exp === "number" && exp > now;
+    const { uid, exp } = JSON.parse(Buffer.from(payload, "base64url").toString());
+    return typeof uid === "string" && typeof exp === "number" && exp > now ? uid : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
 export function sessionCookieOptions(secure) {
+  // Strict works with Google's button: it hands the token to our page's
+  // JavaScript, which posts it same-site. All API calls are same-site fetches.
   return { httpOnly: true, secure, sameSite: "strict", path: "/", maxAge: SESSION_DAYS * 86400_000 };
 }
 
-// Tiny in-memory limiter for the login route: max 10 attempts per IP per 15 min.
+// Tiny in-memory limiter for the login route: max 20 attempts per IP per 15 min.
 const attempts = new Map();
 export function loginRateLimited(ip, now = Date.now()) {
   const windowMs = 15 * 60_000;
   const recent = (attempts.get(ip) || []).filter((t) => now - t < windowMs);
   recent.push(now);
   attempts.set(ip, recent);
-  return recent.length > 10;
+  return recent.length > 20;
 }
 
+/** Sets req.userId, or answers 401. */
 export function requireAuth(secret) {
   return (req, res, next) => {
-    if (verifySessionToken(req.cookies?.[COOKIE_NAME], secret)) return next();
-    res.status(401).json({ error: "unauthorized" });
+    const uid = verifySessionToken(req.cookies?.[COOKIE_NAME], secret);
+    if (!uid) return res.status(401).json({ error: "unauthorized" });
+    req.userId = uid;
+    next();
+  };
+}
+
+/**
+ * Returns a function that checks a Google ID token and returns
+ * { sub, email, name, picture }, or throws. Only verified emails are accepted.
+ */
+export function googleVerifier(clientId) {
+  const client = new OAuth2Client(clientId);
+  return async (credential) => {
+    const ticket = await client.verifyIdToken({ idToken: credential, audience: clientId });
+    const p = ticket.getPayload();
+    if (!p?.sub || !p.email || !p.email_verified) throw new Error("unverified Google account");
+    return { sub: p.sub, email: p.email, name: p.name ?? null, picture: p.picture ?? null };
   };
 }

@@ -4,7 +4,7 @@ import { createAiService } from "./ai/service.js";
 import { createApp } from "./app.js";
 import { pool } from "./db.js";
 
-for (const name of ["SESSION_SECRET", "APP_PASSWORD_HASH"]) {
+for (const name of ["SESSION_SECRET", "GOOGLE_CLIENT_ID"]) {
   if (!process.env[name]) throw new Error(`${name} is not set (see server/.env.example)`);
 }
 
@@ -17,7 +17,10 @@ const app = createApp({
   aiService,
   pool,
   sessionSecret: process.env.SESSION_SECRET,
-  passwordHash: process.env.APP_PASSWORD_HASH,
+  googleClientId: process.env.GOOGLE_CLIENT_ID,
+  // The first sign-in with this email takes over notes from the single-user era.
+  ownerEmail: process.env.OWNER_EMAIL || null,
+  aiDailyLimit: Number(process.env.AI_DAILY_LIMIT) || undefined,
   secureCookies: process.env.NODE_ENV === "production",
   webDist: fileURLToPath(new URL("../../web/dist", import.meta.url)),
 });

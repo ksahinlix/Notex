@@ -10,13 +10,13 @@
     "start": "node --env-file-if-exists=.env src/index.js",
     "dev": "node --env-file-if-exists=.env --watch src/index.js",
     "migrate": "node --env-file-if-exists=.env db/migrate.js",
-    "hash-password": "node scripts/hash-password.js",
     "test": "node --env-file-if-exists=.env.test --test"
   },
   "dependencies": {
     "compression": "^1.8.2",
     "cookie-parser": "^1.4.7",
     "express": "^5.2.1",
+    "google-auth-library": "^11.1.0",
     "pg": "^8.23.0"
   },
   "devDependencies": {

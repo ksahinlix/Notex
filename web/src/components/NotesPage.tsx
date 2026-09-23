@@ -3,9 +3,11 @@ import { Loader2, LogOut, Search, Sparkles, X } from 'lucide-react'
 import { clearSearchCache, useSemanticSearch } from '../ai/useAi'
 import { matchesQuery } from '../lib/notes'
 import { allPaths, buildTree, findProtectedAncestor, pathKeyOf, pathStartsWith } from '../lib/tree'
+import type { User } from '../lib/api'
 import type { Note } from '../lib/types'
 import { store, useNotex } from '../state/store'
 import Composer from './Composer'
+import { ConfirmHost } from './ConfirmDialog'
 import Lightbox from './Lightbox'
 import NoteCard from './NoteCard'
 import PasswordModal from './PasswordModal'
@@ -14,7 +16,7 @@ import Sidebar from './Sidebar'
 
 const PATH_OPTIONS_ID = 'notex-paths'
 
-export default function NotesPage({ onLogout }: { onLogout: () => void }) {
+export default function NotesPage({ user, onLogout }: { user: User; onLogout: () => void }) {
   const state = useNotex()
   const [selectedPath, setSelectedPath] = useState<string[] | null>(null)
   const [query, setQuery] = useState('')
@@ -81,6 +83,7 @@ export default function NotesPage({ onLogout }: { onLogout: () => void }) {
   return (
     <>
       <PasswordModal request={state.pwdRequest} />
+      <ConfirmHost />
       <Lightbox src={lightbox} onClose={() => setLightbox(null)} />
       <datalist id={PATH_OPTIONS_ID}>
         {paths.map((p) => <option key={p} value={p} />)}
@@ -90,6 +93,10 @@ export default function NotesPage({ onLogout }: { onLogout: () => void }) {
         <header className="topbar">
           <strong>Notlar</strong>
           <div className="topbar-actions">
+            <span className="user-chip" title={user.email}>
+              {user.picture ? <img src={user.picture} alt="" referrerPolicy="no-referrer" /> : <span className="user-initial">{(user.name || user.email)[0].toLocaleUpperCase('tr')}</span>}
+              <span className="user-name">{user.name || user.email}</span>
+            </span>
             <button className="btn btn-ghost" onClick={onLogout} title="Çıkış"><LogOut size={14} /></button>
           </div>
         </header>

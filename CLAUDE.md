@@ -17,6 +17,8 @@ New decisions go in the Decisions table and get their own section. Update
 ## Layout
 - `server/`: Express 5 + `pg`, plain JS ES modules, Node 22+.
   - `src/app.js` builds the app; `src/index.js` starts it.
+  - Auth (D16): Google sign-in (`auth.js`, `users.js`). Every query on notes,
+    folders and AI must be scoped to `req.userId`.
   - Schema in `db/schema.sql`; it must stay idempotent because it runs on
     every deploy.
   - `src/ai/`: Cloudflare Workers AI client, prompts, folder + search
@@ -41,7 +43,7 @@ New decisions go in the Decisions table and get their own section. Update
 
 ## Commands
 - web: `npm run dev`, `npm test`, `npm run lint`, `npm run build`
-- server: `npm run dev`, `npm test`, `npm run migrate`, `npm run hash-password -- "<pw>"`
+- server: `npm run dev`, `npm test`, `npm run migrate`
 
 ## Rules
 - AI is for search and classification only, no chatbot UI. It runs on the

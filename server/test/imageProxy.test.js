@@ -1,7 +1,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createApp } from "../src/app.js";
-import { COOKIE_NAME, createSessionToken, hashPassword } from "../src/auth.js";
+import { COOKIE_NAME, createSessionToken } from "../src/auth.js";
 import { isPrivateAddress } from "../src/routes/imageProxy.js";
 
 test("private addresses are recognized", () => {
@@ -28,10 +28,10 @@ const check = async (url) => {
 
 let server, base, cookie;
 before(async () => {
-  const app = createApp({ pool: { query: async () => ({ rows: [] }) }, sessionSecret: "s", passwordHash: await hashPassword("pw"), imageProxy: { fetchImpl, check } });
+  const app = createApp({ pool: { query: async () => ({ rows: [] }) }, sessionSecret: "s", imageProxy: { fetchImpl, check } });
   server = app.listen(0);
   base = `http://localhost:${server.address().port}/api/image-proxy?url=`;
-  cookie = `${COOKIE_NAME}=${createSessionToken("s")}`;
+  cookie = `${COOKIE_NAME}=${createSessionToken("s", "user-1")}`;
 });
 after(() => server?.close());
 
