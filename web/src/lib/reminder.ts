@@ -8,8 +8,9 @@
 // exactly what small language models get wrong.
 
 export interface ParsedReminder {
-  date: Date
-  /** The recognized parts of the text, e.g. "yarın 15:00". */
+  /** null: a reminder without a date ("... hatırlat", "unutma"). */
+  date: Date | null
+  /** The recognized parts of the text, e.g. "yarın 15:00" or "hatırlat". */
   matched: string
 }
 
@@ -87,7 +88,22 @@ function futureDate(now: Date, day: number, month: number, year?: number) {
 }
 
 /** Returns the reminder in the text, or null if it has no date/time. */
+// Words that ask for a reminder even without a date: hatırlat(ma), anımsat,
+// unutma(yayım), remind(er).
+const KEYWORD = re(`${B}(hatırlat\\p{L}*|anımsat\\p{L}*|unutma\\p{L}*|remind\\p{L}*)${E}`)
+
+/**
+ * Returns the reminder in the text: a date/time if one is written, otherwise
+ * an undated reminder if the text asks for one ("hatırlat"), otherwise null.
+ */
 export function parseReminder(text: string, now: Date = new Date()): ParsedReminder | null {
+  const dated = parseDate(text, now)
+  if (dated) return dated
+  const k = find(KEYWORD, text.toLocaleLowerCase('tr'))
+  return k ? { date: null, matched: text.slice(k.index, k.index + k.text.length) } : null
+}
+
+function parseDate(text: string, now: Date): { date: Date; matched: string } | null {
   const s = text.toLocaleLowerCase('tr')
   const hits: Hit[] = []
   const t = parseTime(s)

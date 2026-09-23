@@ -239,7 +239,7 @@ export class NotexStore {
 
   // ---- note actions ----
 
-  async create(path: string[], content: NoteContent, meta: { isListItem?: boolean; reminderAt?: string | null }): Promise<boolean> {
+  async create(path: string[], content: NoteContent, meta: { isListItem?: boolean; reminderAt?: string | null; isReminder?: boolean }): Promise<boolean> {
     const { ok, key } = await this.keyForPath(path)
     if (!ok) return false
     const sealed = await seal(newNote(path, meta), content, key)

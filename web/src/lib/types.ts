@@ -30,6 +30,8 @@ export interface Note {
   isListItem: boolean
   checked: boolean
   reminderAt: string | null
+  /** A reminder, with a date (reminderAt) or without one. */
+  isReminder?: boolean
   createdAt: string
   updatedAt: string
   deletedAt?: string | null

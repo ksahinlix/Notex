@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Loader2, LogOut, Search, Sparkles, X } from 'lucide-react'
 import { clearSearchCache, useSemanticSearch } from '../ai/useAi'
+import { queryTerms } from '../lib/highlight'
 import { matchesQuery } from '../lib/notes'
 import { allPaths, buildTree, findProtectedAncestor, pathKeyOf, pathStartsWith } from '../lib/tree'
 import type { User } from '../lib/api'
@@ -11,6 +12,7 @@ import { ConfirmHost } from './ConfirmDialog'
 import Lightbox from './Lightbox'
 import NoteCard from './NoteCard'
 import PasswordModal from './PasswordModal'
+import Reader from './Reader'
 import Reminders from './Reminders'
 import Sidebar from './Sidebar'
 
@@ -20,7 +22,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
   const state = useNotex()
   const [selectedPath, setSelectedPath] = useState<string[] | null>(null)
   const [query, setQuery] = useState('')
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  const [readerId, setReaderId] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [treeError, setTreeError] = useState('')
 
@@ -39,19 +41,26 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
     () => (selectedPath ? state.notes.filter((n) => pathStartsWith(n.path, selectedPath)) : state.notes),
     [state.notes, selectedPath],
   )
-  // Search: notes containing the words first, then notes the AI found by
-  // meaning (D15). Locked notes can't be searched.
+  // Search covers ALL notes (not just the selected folder): notes containing
+  // the words first, then notes the AI found by meaning (D15). Locked notes
+  // can't be searched.
+  const searching = query.trim().length > 0
   const semantic = useSemanticSearch(query)
-  const keywordHits = query.trim()
-    ? scoped.filter((n) => {
+  const terms = useMemo(() => queryTerms(query), [query])
+  const keywordHits = searching
+    ? state.notes.filter((n) => {
         const c = contentOf(n)
         return !!c && matchesQuery(n, c, query)
       })
     : []
-  const byId = new Map(scoped.map((n) => [n.id, n]))
+  const byId = new Map(state.notes.map((n) => [n.id, n]))
   const keywordIds = new Set(keywordHits.map((n) => n.id))
   const meaningHits = (semantic.ids ?? []).flatMap((id) => (keywordIds.has(id) ? [] : (byId.get(id) ?? [])))
-  const visible = !query.trim() ? scoped : [...keywordHits, ...meaningHits]
+  const meaningIds = new Set(meaningHits.map((n) => n.id))
+  const visible = !searching ? scoped : [...keywordHits, ...meaningHits]
+  const readerIndex = readerId ? visible.findIndex((n) => n.id === readerId) : -1
+  const readerNote = readerIndex >= 0 ? visible[readerIndex] : null
+  const readerContent = readerNote ? contentOf(readerNote) : undefined
 
   async function onLockClick(path: string[]) {
     setTreeError('')
@@ -71,20 +80,25 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
     if (folder) void store.unlock(folder.pathKey)
   }
 
-  function toggleExpand(id: string) {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
 
   return (
     <>
       <PasswordModal request={state.pwdRequest} />
       <ConfirmHost />
       <Lightbox src={lightbox} onClose={() => setLightbox(null)} />
+      {readerNote && readerContent && (
+        <Reader
+          note={readerNote}
+          content={readerContent}
+          terms={terms}
+          hasPrev={readerIndex > 0}
+          hasNext={readerIndex < visible.length - 1}
+          onPrev={() => setReaderId(visible[readerIndex - 1].id)}
+          onNext={() => setReaderId(visible[readerIndex + 1].id)}
+          onClose={() => setReaderId(null)}
+          onImageClick={setLightbox}
+        />
+      )}
       <datalist id={PATH_OPTIONS_ID}>
         {paths.map((p) => <option key={p} value={p} />)}
       </datalist>
@@ -134,7 +148,11 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
           </div>
 
           <section className="notes">
-            {selectedPath && <div className="crumb">{selectedPath.join(' / ')}</div>}
+            {searching ? (
+              selectedPath && <div className="crumb muted">Tüm notlarda aranıyor (seçili klasör: {selectedPath.join(' / ')})</div>
+            ) : (
+              selectedPath && <div className="crumb">{selectedPath.join(' / ')}</div>
+            )}
             {query.trim().length >= 2 && (
               <div className="search-note" data-state={semantic.loading ? 'loading' : semantic.ids ? 'done' : 'off'}>
                 {semantic.loading ? <Loader2 size={11} className="spin" /> : <Sparkles size={11} />}
@@ -143,6 +161,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
                 {semantic.loading && ' · AI anlamca arıyor...'}
               </div>
             )}
+            {semantic.error && query.trim().length >= 2 && <div className="search-error">{semantic.error}</div>}
             {!state.loaded ? (
               <div className="muted">Yükleniyor...</div>
             ) : visible.length === 0 ? (
@@ -153,9 +172,10 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
                   key={n.id}
                   note={n}
                   content={contentOf(n)}
-                  expanded={expanded.has(n.id)}
                   pathOptionsId={PATH_OPTIONS_ID}
-                  onToggleExpand={() => toggleExpand(n.id)}
+                  terms={searching ? terms : undefined}
+                  meaningMatch={meaningIds.has(n.id)}
+                  onOpenReader={() => setReaderId(n.id)}
                   onSelectPath={setSelectedPath}
                   onImageClick={setLightbox}
                   onUnlock={() => unlockNote(n)}

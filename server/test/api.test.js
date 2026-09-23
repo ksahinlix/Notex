@@ -168,3 +168,16 @@ test("storage quota per user", async () => {
   const tooBig = note("big-2", { content: { text: "y".repeat(5000) } });
   assert.equal((await api("PUT", "/api/notes/big-2", tooBig)).status, 413);
 });
+
+test("reminders with and without a date", async () => {
+  const api = client();
+  await api.login("rem@example.com");
+  const undated = await api("PUT", "/api/notes/r1", note("r1", { isReminder: true }));
+  assert.equal(undated.body.isReminder, true);
+  assert.equal(undated.body.reminderAt, null);
+  const dated = await api("PUT", "/api/notes/r2", note("r2", { reminderAt: "2030-01-01T09:00:00.000Z" }));
+  assert.equal(dated.body.isReminder, true); // a date implies a reminder
+  const none = await api("PUT", "/api/notes/r3", note("r3"));
+  assert.equal(none.body.isReminder, false);
+  assert.equal((await api("PUT", "/api/notes/r4", note("r4", { isReminder: "yes" }))).status, 400);
+});

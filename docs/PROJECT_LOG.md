@@ -715,3 +715,53 @@ and reminder notifications.
 **Next:** the owner creates the Google OAuth client and sets `GOOGLE_CLIENT_ID`
 and `OWNER_EMAIL` locally and in Render, then we deploy. The server doesn't
 start without `GOOGLE_CLIENT_ID`, so the variables must be set first.
+
+### 2026-09-23 — Search highlighting, reading mode, reminder words and picker
+**Owner feedback:** highlight search results; search by meaning seemed weak
+(LSA/Cloudflare notes not found for software); a Word-like reading mode;
+"hatırlat" should create a reminder, also without a time; a manual reminder
+without the year, 1 hour later by default, with quick options; no date field
+when editing.
+
+**Investigation of "search by meaning is weak":**
+- On the owner's real notes, the server search worked: "yazılım" found the
+  Cloudflare note and both "Sistem Tasarım / LSA" notes.
+- An experiment with AI-written topic tags per note didn't improve results
+  (26/27 either way on 20 notes), so it was not built.
+- The real causes were in the app:
+  1. Search only covered the folder selected in the tree.
+  2. AI search errors (limits, timeouts) were silently hidden.
+  3. A search fired at every typing pause, wasting calls and hitting limits.
+
+**What we did:**
+- Search covers all notes (with a hint when a folder is selected) and waits
+  0.8 s after typing stops. AI errors are shown. Matched words are highlighted
+  (\`lib/highlight.ts\`, Turkish-aware), and AI-only results get an "anlamca
+  ilgili" label. The re-ranker sees 400 characters per note instead of 200.
+- Reading mode (\`Reader.tsx\`): a full-screen, centered 760 px page in a
+  serif font, A−/A+ text size (remembered), ←/→ to the previous or next note,
+  Esc to close. It replaces the old inline "expanded" card.
+- Reminders: "hatırlat", "anımsat", "unutma" and "remind…" create a reminder.
+  A date in the text wins; otherwise it is undated. New column
+  \`notes.is_reminder\` and API field \`isReminder\`. The reminders panel lists
+  undated ones under "Tarihsiz", and ✓ marks a reminder done.
+- Manual reminder picker (\`ReminderPicker.tsx\`): quick choices (1 saat,
+  2 saat, Bu akşam, Yarın 09:00, 3 gün, 1 hafta, Tarihsiz), or a day list
+  without a year plus a time. It opens at 1 hour later. The composer and note
+  editing both use it.
+- Editing: the date field is gone. Edited notes show "düzenlendi <time>".
+- Fixes found on the way:
+  - The delete preview used \`/s+/\` instead of \`/\s+/\` (every "s" became a
+    space), a slip from an earlier shell edit.
+  - Going back to "Tümü" kept the previously selected folder as the
+    composer's path; now AI chooses again.
+
+**How verified:**
+- Server: 21 tests (new: dated and undated reminders).
+- Web: 67 tests (new: reminder words, presets, highlighting), plus typecheck,
+  lint and build.
+- Browser test (mocked API), 24 checks: global search with a folder selected,
+  highlighting and labels, error message, reader size/navigation/Esc,
+  undated reminder saved and listed, picker (no year, 1 hour default, preset,
+  custom time saved), ✓ done, edit without a date field and "düzenlendi",
+  delete preview intact, phone width.
