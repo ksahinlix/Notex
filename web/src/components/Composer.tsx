@@ -121,7 +121,7 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
 
   return (
     <div className={`composer-bar ${expanded ? 'expanded' : ''}`} onKeyDown={(e) => e.key === 'Escape' && expanded && setExpanded(false)}>
-      <div className="composer card">
+      <div className="composer card" data-tour="composer">
         <RichEditor
           key={editorKey}
           ref={editor}
@@ -170,6 +170,7 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
         <div className="composer-row">
           <input
             className="path-input"
+            data-tour="path"
             list={pathOptionsId}
             placeholder="Kategori / Klasör (boş bırakırsan AI seçer)"
             value={effectivePath}
@@ -184,6 +185,7 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
           <button
             className={`btn btn-ghost ${reminder ? 'on' : ''}`}
             title="Hatırlatma ekle"
+            data-tour="reminder"
             onClick={() => setPickerOpen((o) => !o)}
           >
             <Clock size={14} />
@@ -191,7 +193,7 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
           <button className="btn btn-ghost" title="Görsel ekle" onClick={() => fileRef.current?.click()}>
             <ImagePlus size={14} />
           </button>
-          <button className="btn btn-ghost" title={expanded ? 'Küçült (Esc)' : 'Tam ekran yaz'} onClick={() => setExpanded(!expanded)}>
+          <button className="btn btn-ghost" data-tour="fullscreen" title={expanded ? 'Küçült (Esc)' : 'Tam ekran yaz'} onClick={() => setExpanded(!expanded)}>
             {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
           <button

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlarmClock, Loader2, LogOut, NotebookPen, Search, Sparkles, X } from 'lucide-react'
+import { AlarmClock, CircleHelp, Loader2, LogOut, NotebookPen, Search, Sparkles, X } from 'lucide-react'
 import { clearSearchCache, useSemanticSearch } from '../ai/useAi'
 import { isReminderNote } from '../lib/agenda'
 import { queryTerms } from '../lib/highlight'
+import { markTourDone, tourDone } from '../lib/tour'
 import { folderInto, folderRenamed, noteMoveTarget } from '../lib/move'
 import { matchesQuery } from '../lib/notes'
 import { allPaths, buildTree, findProtectedAncestor, pathKeyOf, pathStartsWith } from '../lib/tree'
@@ -20,6 +21,7 @@ import RemindersPage from './RemindersPage'
 import UpcomingStrip from './UpcomingStrip'
 import Sidebar from './Sidebar'
 import { ToastHost } from './ToastHost'
+import Tour from './Tour'
 
 const PATH_OPTIONS_ID = 'notex-paths'
 
@@ -39,6 +41,15 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
   }
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [treeError, setTreeError] = useState('')
+  // Guided tour: opens by itself on a user's first visit (per browser), or from the ? button.
+  const [tourSeen, setTourSeen] = useState(() => tourDone(user.id))
+  const [tourOpen, setTourOpen] = useState(false)
+  const touring = tourOpen || (!tourSeen && state.loaded && view === 'notes')
+  const closeTour = () => {
+    markTourDone(user.id)
+    setTourSeen(true)
+    setTourOpen(false)
+  }
 
   useEffect(() => {
     void store.load()
@@ -136,6 +147,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
       <PasswordModal request={state.pwdRequest} />
       <ConfirmHost />
       <ToastHost />
+      {touring && <Tour onClose={closeTour} />}
       <Lightbox src={lightbox} onClose={() => setLightbox(null)} />
       {readerNote && readerContent && (
         <Reader
@@ -160,11 +172,23 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
             <button className={view === 'notes' ? 'on' : ''} onClick={() => setView('notes')}>
               <NotebookPen size={14} /> Notlar
             </button>
-            <button className={view === 'reminders' ? 'on' : ''} onClick={() => setView('reminders')}>
+            <button className={view === 'reminders' ? 'on' : ''} data-tour="reminders-tab" onClick={() => setView('reminders')}>
               <AlarmClock size={14} /> Hatırlatmalar {reminderCount > 0 && <span className="tab-count">{reminderCount}</span>}
             </button>
           </nav>
           <div className="topbar-actions">
+            <button
+              className="btn btn-ghost"
+              data-tour="help"
+              title="Kullanım turu"
+              aria-label="Kullanım turu"
+              onClick={() => {
+                setView('notes')
+                setTourOpen(true)
+              }}
+            >
+              <CircleHelp size={14} />
+            </button>
             <span className="user-chip" title={user.email}>
               {user.picture ? <img src={user.picture} alt="" referrerPolicy="no-referrer" /> : <span className="user-initial">{(user.name || user.email)[0].toLocaleUpperCase('tr')}</span>}
               <span className="user-name">{user.name || user.email}</span>
@@ -186,14 +210,14 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
           <>
         <UpcomingStrip notes={state.notes} contentOf={contentOf} onShowAll={() => setView('reminders')} />
 
-        <div className="search">
+        <div className="search" data-tour="search">
           <Search size={14} className="search-icon" />
           <input placeholder="Notlarda ara... (anlamına göre de bulur)" value={query} onChange={(e) => setQuery(e.target.value)} />
           {query && <button className="icon-btn search-clear" onClick={() => setQuery('')} aria-label="Temizle"><X size={13} /></button>}
         </div>
 
         <div className="layout">
-          <div className="sidebar-wrap">
+          <div className="sidebar-wrap" data-tour="tree">
             <Sidebar
               tree={tree}
               selectedPath={selectedPath}
@@ -243,6 +267,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
                   meaningMatch={meaningIds.has(n.id)}
                   onOpenReader={() => openReader(n.id, visible.map((x) => x.id))}
                   onMove={(note, path, exact) => void moveNote(note, path, exact)}
+                  tourTarget={n.id === visible.find((x) => contentOf(x))?.id}
                   onSelectPath={setSelectedPath}
                   onImageClick={setLightbox}
                   onUnlock={() => unlockNote(n)}

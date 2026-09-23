@@ -27,13 +27,15 @@ interface Props {
   onOpenReader: () => void
   /** Move this note: a picked folder follows rule 1 (keeps its folder name), a typed path is exact. */
   onMove: (note: Note, path: string[], exact: boolean) => void
+  /** This card is highlighted by the guided tour. */
+  tourTarget?: boolean
   onSelectPath: (path: string[]) => void
   onImageClick: (src: string) => void
   onUnlock: () => void
 }
 
 
-export default function NoteCard({ note, content, pathOptionsId, folderPaths, terms, meaningMatch, onOpenReader, onMove, onSelectPath, onImageClick, onUnlock }: Props) {
+export default function NoteCard({ note, content, pathOptionsId, folderPaths, terms, meaningMatch, onOpenReader, onMove, tourTarget, onSelectPath, onImageClick, onUnlock }: Props) {
   const [editing, setEditing] = useState(false)
   const [draftPath, setDraftPath] = useState('')
   const [draftReminder, setDraftReminder] = useState<ReminderChoice | null>(null)
@@ -121,7 +123,7 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
   }
 
   return (
-    <article ref={cardRef} className={`note ${dragging ? 'dragging' : ''}`}>
+    <article ref={cardRef} className={`note ${dragging ? 'dragging' : ''}`} data-tour={tourTarget ? 'note' : undefined}>
       <div className="note-row">
         {!editing && (
           // Only this handle drags (the rest of the card stays selectable text).

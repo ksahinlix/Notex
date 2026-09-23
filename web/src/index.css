@@ -354,3 +354,22 @@ mark { background: #fff1a8; color: inherit; border-radius: 2px; padding: 0 1px; 
 .folder-menu button:hover { background: var(--accent-soft); color: var(--accent); }
 .rename-input { flex: 1; min-width: 0; padding: 3px 6px; font-size: 13px; }
 .tree-label[draggable='true'] { cursor: pointer; }
+
+/* ---- guided tour ---- */
+.tour { position: fixed; inset: 0; z-index: 80; }
+.tour-dim { position: fixed; inset: 0; background: rgba(15, 15, 20, 0.55); }
+.tour-spot {
+  position: fixed; border-radius: 10px; pointer-events: none; transition: all 0.25s ease;
+  box-shadow: 0 0 0 9999px rgba(15, 15, 20, 0.55), 0 0 0 2px var(--accent);
+}
+.tour-card { position: fixed; padding: 16px 18px 14px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25); display: flex; flex-direction: column; gap: 8px; }
+.tour-card.sheet { border-radius: 14px; }
+.tour-x { position: absolute; top: 8px; right: 8px; }
+.tour-title { font-size: 15px; font-weight: 600; padding-right: 20px; }
+.tour-body { font-size: 13.5px; line-height: 1.55; color: var(--text); }
+.tour-foot { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.tour-dots { display: flex; gap: 4px; margin-right: auto; }
+.tour-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+.tour-dots span.on { background: var(--accent); }
+/* the highlighted note shows its hover-only buttons */
+.tour-focus .hover-only { opacity: 1; }
