@@ -4,7 +4,7 @@ A personal, hierarchical note app with on-device AI for sorting and searching
 notes, and end-to-end encrypted folders. Web first, then mobile.
 
 - **Why things are built this way:** [`docs/PROJECT_LOG.md`](docs/PROJECT_LOG.md)
-- **AI:** click ✨ **AI** in the app header. A ~120 MB model downloads once and then runs in your browser; notes are never sent anywhere. It adds search by meaning and folder suggestions while you write.
+- **AI:** folder suggestions while you write and search by meaning, done by the server with Cloudflare Workers AI (free tier). Notes in locked folders are never sent. Without Cloudflare settings the app works, just without AI.
 - **Original prototype:** [`docs/prototype.jsx`](docs/prototype.jsx)
 
 ## Project layout
@@ -54,6 +54,8 @@ Fill in `server/.env`:
 | `DATABASE_URL` | Neon dashboard → your project → **Connect** → use the copy button (the password is hidden as `****` on screen). Change `sslmode=require` to `sslmode=verify-full` to silence a warning from `pg`. |
 | `SESSION_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `APP_PASSWORD_HASH` | `node scripts/hash-password.js 'your password'`, then paste the output in **single quotes** |
+| `CLOUDFLARE_ACCOUNT_ID` | Optional (AI). The 32 characters in the dashboard URL: `dash.cloudflare.com/<account id>/home` |
+| `CLOUDFLARE_API_TOKEN` | Optional (AI). My Profile → API Tokens → **Workers AI** template; under *Account Resources* include your account |
 
 Then:
 
@@ -83,15 +85,17 @@ cd web && npm test && npm run lint && npm run build
 cd server && npm test
 ```
 
-The server's API tests need an empty test database. Put
-`TEST_DATABASE_URL=...` in `server/.env.test`; without it they are skipped.
+The server's database tests start a throwaway local Postgres by themselves
+(`embedded-postgres`, downloaded by `npm install`). To use your own test
+database instead, put `TEST_DATABASE_URL=...` in `server/.env.test`.
 **Its tables are wiped on every run**, so never point it at real data.
 
 ## Deploying (Render + Neon)
 
 1. Push this repository to GitHub.
 2. In Render: **New → Blueprint**, then pick the repo. Render reads `render.yaml`.
-3. When asked, set `DATABASE_URL` (Neon) and `APP_PASSWORD_HASH`.
+3. When asked, set `DATABASE_URL` (Neon), `APP_PASSWORD_HASH` and, for AI,
+   `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
    `SESSION_SECRET` is generated automatically.
 4. Open the service URL and log in. The schema is applied on each start.
 

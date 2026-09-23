@@ -19,15 +19,17 @@ New decisions go in the Decisions table and get their own section. Update
   - `src/app.js` builds the app; `src/index.js` starts it.
   - Schema in `db/schema.sql`; it must stay idempotent because it runs on
     every deploy.
+  - `src/ai/`: Cloudflare Workers AI client, prompts, folder + search
+    service (D15). Eval scripts: `scripts/eval-cloud-*.mjs`.
+  - Tests start a throwaway Postgres (`test/helpers/db.js`) unless
+    `TEST_DATABASE_URL` is set.
 - `web/`: Vite + React + TypeScript.
   - Pure logic lives in `src/lib/` (types, api, crypto, tree, notes, format,
     images), with `*.test.ts` next to the testable ones.
   - `src/state/store.ts`: the app store (notes, folders, unlocked keys,
     password prompts). All note changes go through it: local update first,
     then `PUT` to the server.
-  - `src/ai/`: on-device embeddings (D12): model in a Web Worker, ranking in
-    `vector.ts`, hooks in `useAi.ts`. Model evaluation: `scripts/eval-ai.mjs`.
-    Category model (D13): `llm.ts` + `llm.worker.ts` (WebLLM, WebGPU).
+  - `src/ai/useAi.ts`: hooks calling the server AI routes (D15).
   - `src/lib/reminder.ts` (Turkish date parser, D14), `src/lib/paste.ts`
     (pasted HTML -> text/image blocks).
   - `src/components/`: UI (NotesPage, Sidebar, NoteCard, Composer, RichEditor,
@@ -40,12 +42,10 @@ New decisions go in the Decisions table and get their own section. Update
 ## Commands
 - web: `npm run dev`, `npm test`, `npm run lint`, `npm run build`
 - server: `npm run dev`, `npm test`, `npm run migrate`, `npm run hash-password -- "<pw>"`
-- The server's API tests need `TEST_DATABASE_URL`. In a cloud session, a local
-  Postgres can be started with `service postgresql start`.
 
 ## Rules
-- AI features run on-device only, and are for search and classification only.
-  No chatbot UI and no server-side LLM.
+- AI is for search and classification only, no chatbot UI. It runs on the
+  server via Cloudflare (D15). Never send encrypted notes' content to the AI.
 - Encrypted notes: every text field goes inside `cipher`. Never add plaintext
   content fields for encrypted notes, and never store password hashes for
   folders (see D8).

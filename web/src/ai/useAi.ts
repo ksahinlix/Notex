@@ -1,168 +1,106 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
-import { matchesQuery } from '../lib/notes'
-import type { Note, NoteContent } from '../lib/types'
-import { ai, type AiStatus } from './engine'
-import { llm, type LlmStatus } from './llm'
-import { noteEmbeddingText, rankNotes, suggestFolders, type FolderSuggestion, type Vec } from './vector'
+// React hooks for the AI features, which run on the server (D15):
+// folder suggestions while writing, and search by meaning.
+// Both wait until typing pauses, cancel outdated requests, and cache answers,
+// so a note costs about one AI call (the free daily allowance is limited).
 
-export function useAiStatus(): AiStatus {
-  return useSyncExternalStore(ai.subscribe, ai.getSnapshot)
-}
+import { useEffect, useState } from 'react'
+import { api, type Classification } from '../lib/api'
 
-export interface NoteVectors {
-  notes: Map<string, Vec>
-  /** Vectors of page names, keyed by path joined with "/". */
-  names: Map<string, Vec>
-}
+const classifyCache = new Map<string, Classification>()
+const searchCache = new Map<string, string[]>()
 
-const EMPTY: NoteVectors = { notes: new Map(), names: new Map() }
+/** Server said AI is not configured (503): stop asking for this session. */
+let aiUnavailable = false
 
-/**
- * Embeds every readable note (and every page name) in the background.
- * Locked notes are skipped. Returns empty maps while AI is off or loading.
- */
-export function useNoteVectors(notes: Note[], contentOf: (n: Note) => NoteContent | undefined, ready: boolean, plainVersion: unknown): NoteVectors {
-  const [vectors, setVectors] = useState<NoteVectors>(EMPTY)
-
-  useEffect(() => {
-    if (!ready) return
-    let cancelled = false
-    const items = notes.flatMap((n) => {
-      const c = contentOf(n)
-      return c ? [{ id: n.id, text: noteEmbeddingText(n.path, c.listItemText || c.text), persist: !n.encrypted }] : []
-    })
-    const pages = [...new Map(notes.map((n) => [n.path.join('/'), n.path])).entries()]
-    ;(async () => {
-      try {
-        const [vecs, nameVecs] = await Promise.all([
-          ai.embedPassages(items.map((i) => i.text), items.map((i) => i.persist)),
-          ai.embedPassages(pages.map(([, p]) => p.join(' / ')), pages.map(() => true)),
-        ])
-        if (cancelled) return
-        setVectors({
-          notes: new Map(items.map((it, i) => [it.id, vecs[i]])),
-          names: new Map(pages.map(([key], i) => [key, nameVecs[i]])),
-        })
-      } catch {
-        /* AI turned off mid-way; keep previous vectors */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-    // plainVersion changes when folders are unlocked/locked; contentOf reads it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes, ready, plainVersion])
-
-  return ready ? vectors : EMPTY
+export interface CategorySuggestion {
+  result: Classification | null
+  /** An answer for the current text is on its way. */
+  loading: boolean
+  /** The text the current result belongs to. */
+  forText: string
 }
 
 /**
- * Meaning-based search: returns note ids in ranked order, or null when AI
- * isn't available (the caller then uses plain keyword search).
+ * Folder suggestion for the text being written, ~1.2 s after typing stops.
+ * `enabled` is false when the note goes into a protected folder (its text
+ * must not be sent anywhere) or the user already chose a path.
  */
-export function useSemanticSearch(query: string, candidates: Note[], contentOf: (n: Note) => NoteContent | undefined, vectors: NoteVectors, ready: boolean): string[] | null {
-  const [result, setResult] = useState<{ query: string; ids: string[] } | null>(null)
-  const q = query.trim()
-
-  useEffect(() => {
-    if (!ready || q.length < 2) return
-    let cancelled = false
-    const t = setTimeout(async () => {
-      try {
-        const qv = await ai.embedQuery(q)
-        if (cancelled) return
-        const items = candidates.flatMap((n) => {
-          const vec = vectors.notes.get(n.id)
-          return vec ? [{ id: n.id, vec }] : []
-        })
-        const keyword = new Set(candidates.filter((n) => matchesQuery(n, contentOf(n), q)).map((n) => n.id))
-        setResult({ query: q, ids: rankNotes(qv, items, keyword).map((r) => r.id) })
-      } catch {
-        /* AI turned off */
-      }
-    }, 250)
-    return () => {
-      cancelled = true
-      clearTimeout(t)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, ready, vectors, candidates])
-
-  return ready && result && result.query === q ? result.ids : null
-}
-
-/** Up to 3 existing pages that fit the text being written. */
-export function useFolderSuggestions(text: string, notes: Note[], vectors: NoteVectors, ready: boolean): FolderSuggestion[] {
-  const [result, setResult] = useState<{ text: string; list: FolderSuggestion[] }>({ text: '', list: [] })
+export function useCategorySuggestion(text: string, enabled: boolean): CategorySuggestion {
   const t = text.trim()
+  const [state, setState] = useState<{ text: string; result: Classification | null }>({ text: '', result: null })
 
-  useEffect(() => {
-    if (!ready || t.length < 4 || vectors.notes.size === 0) return
-    let cancelled = false
-    const timer = setTimeout(async () => {
-      try {
-        const qv = await ai.embedQuery(t)
-        if (cancelled) return
-        const items = notes.flatMap((n) => {
-          const vec = vectors.notes.get(n.id)
-          return vec ? [{ path: n.path, vec }] : []
-        })
-        setResult({ text: t, list: suggestFolders(qv, items, vectors.names) })
-      } catch {
-        /* AI turned off */
-      }
-    }, 400)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [t, notes, vectors, ready])
-
-  // A new note must not inherit the previous note's suggestions.
-  if (t.length < 4 && result.text) setResult({ text: '', list: [] })
-
-  // While typing, keep showing the previous suggestions until new ones arrive.
-  return ready && t.length >= 4 ? result.list : []
-}
-
-export function useLlmStatus(): LlmStatus {
-  return useSyncExternalStore(llm.subscribe, llm.getSnapshot)
-}
-
-/**
- * The category model's folder for the text being written (D13): asked ~0.8 s
- * after typing stops. Keeps showing the last answer while a new one is computed.
- */
-export function useCategorySuggestion(
-  text: string,
-  folders: string[][],
-  ready: boolean,
-): { path: string[] | null; loading: boolean; forText: string } {
-  const [result, setResult] = useState<{ text: string; path: string[] | null }>({ text: '', path: null })
-  const t = text.trim()
-
-  // A new note (text cleared) must not inherit the previous note's answer.
+  // A new note must not inherit the previous note's answer.
   // (Adjusting state during render, as recommended over an effect.)
-  if (t.length < 4 && result.text) setResult({ text: '', path: null })
+  if (t.length < 4 && state.text) setState({ text: '', result: null })
+
+  const active = enabled && !aiUnavailable && t.length >= 4
+  useEffect(() => {
+    if (!active) return
+    const cached = classifyCache.get(t)
+    const ctrl = new AbortController()
+    const timer = setTimeout(
+      async () => {
+        try {
+          const result = cached ?? (await api.classify(t, ctrl.signal))
+          classifyCache.set(t, result)
+          setState({ text: t, result })
+        } catch (e) {
+          if (ctrl.signal.aborted) return
+          if ((e as { status?: number }).status === 503) aiUnavailable = true
+          setState({ text: t, result: null }) // no suggestion; the user types a path
+        }
+      },
+      cached ? 0 : 1200,
+    )
+    return () => {
+      clearTimeout(timer)
+      ctrl.abort()
+    }
+  }, [t, active])
+
+  if (!active) return { result: null, loading: false, forText: '' }
+  // While typing continues the previous answer stays visible, marked as loading.
+  return { result: state.result, loading: state.text !== t, forText: state.text }
+}
+
+/**
+ * Note ids matching `query` by meaning, best first, or null while unknown or
+ * when AI is unavailable (the caller then shows keyword matches only).
+ */
+export function useSemanticSearch(query: string): { ids: string[] | null; loading: boolean } {
+  const q = query.trim()
+  const [state, setState] = useState<{ q: string; ids: string[] | null }>({ q: '', ids: null })
+  const active = !aiUnavailable && q.length >= 2
 
   useEffect(() => {
-    if (!ready || t.length < 4) return
-    let cancelled = false
-    const timer = setTimeout(async () => {
-      const path = await llm.classify(t, folders)
-      if (!cancelled) setResult({ text: t, path })
-    }, 800)
+    if (!active) return
+    const cached = searchCache.get(q)
+    const ctrl = new AbortController()
+    const timer = setTimeout(
+      async () => {
+        try {
+          const ids = cached ?? (await api.search(q, ctrl.signal)).ids
+          searchCache.set(q, ids)
+          setState({ q, ids })
+        } catch (e) {
+          if (ctrl.signal.aborted) return
+          if ((e as { status?: number }).status === 503) aiUnavailable = true
+          setState({ q, ids: null })
+        }
+      },
+      cached ? 0 : 500,
+    )
     return () => {
-      cancelled = true
       clearTimeout(timer)
+      ctrl.abort()
     }
-    // `folders` is rebuilt on each render; its content only changes with notes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t, ready, folders.length])
+  }, [q, active])
 
-  if (!ready || t.length < 4) return { path: null, loading: false, forText: '' }
-  // While the user keeps typing the previous answer stays visible, but it is
-  // marked as loading until the answer for the current text arrives.
-  return { path: result.path, loading: result.text !== t, forText: result.text }
+  if (!active) return { ids: null, loading: false }
+  return { ids: state.q === q ? state.ids : null, loading: state.q !== q }
+}
+
+/** Notes changed: cached search results may be outdated. */
+export function clearSearchCache() {
+  searchCache.clear()
 }

@@ -15,9 +15,10 @@ export class ApiError extends Error {
 /** Fired when the login session has expired; App returns to the login screen. */
 export const UNAUTHORIZED_EVENT = 'notex:unauthorized'
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(path, {
     method,
+    signal,
     headers: body === undefined ? undefined : { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
     credentials: 'same-origin',
@@ -52,4 +53,17 @@ export const api = {
   saveProtectedFolder: (f: ProtectedFolder) =>
     request<ProtectedFolder>('PUT', `/api/protected-folders/${encodeURIComponent(f.pathKey)}`, f),
   deleteProtectedFolder: (pathKey: string) => request<null>('DELETE', `/api/protected-folders/${encodeURIComponent(pathKey)}`),
+
+  // AI (D15), done by the server. 503 means AI isn't configured there.
+  classify: (text: string, signal?: AbortSignal) => request<Classification>('POST', '/api/ai/classify', { text }, signal),
+  search: (q: string, signal?: AbortSignal) =>
+    request<{ ids: string[]; reranked: boolean }>('GET', `/api/ai/search?q=${encodeURIComponent(q)}`, undefined, signal),
+}
+
+export interface Classification {
+  /** The folder the AI picked, existing or new. */
+  path: string[]
+  isNew: boolean
+  /** Existing folders whose notes are most similar. */
+  alternatives: string[][]
 }

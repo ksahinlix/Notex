@@ -46,3 +46,13 @@ CREATE TABLE IF NOT EXISTS protected_folders (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at    TIMESTAMPTZ
 );
+
+-- Search vectors of plain notes (D15), made by Cloudflare's bge-m3 model.
+-- Encrypted notes never get a row. `text_hash` tells whether the vector is
+-- still up to date with the note's text; stale rows are recomputed lazily.
+CREATE TABLE IF NOT EXISTS note_vectors (
+  note_id    TEXT PRIMARY KEY REFERENCES notes(id) ON DELETE CASCADE,
+  text_hash  TEXT        NOT NULL,
+  vector     REAL[]      NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
