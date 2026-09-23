@@ -21,3 +21,7 @@ services:
         generateValue: true
       - key: APP_PASSWORD_HASH
         sync: false
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false

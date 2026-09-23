@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { LogOut, Search, Sparkles, X } from 'lucide-react'
-import { useAiStatus, useLlmStatus, useNoteVectors, useSemanticSearch } from '../ai/useAi'
+import { Loader2, LogOut, Search, Sparkles, X } from 'lucide-react'
+import { clearSearchCache, useSemanticSearch } from '../ai/useAi'
 import { matchesQuery } from '../lib/notes'
 import { allPaths, buildTree, findProtectedAncestor, pathKeyOf, pathStartsWith } from '../lib/tree'
 import type { Note } from '../lib/types'
 import { store, useNotex } from '../state/store'
-import AiToggle from './AiToggle'
 import Composer from './Composer'
 import Lightbox from './Lightbox'
 import NoteCard from './NoteCard'
@@ -31,27 +30,26 @@ export default function NotesPage({ onLogout }: { onLogout: () => void }) {
   const paths = useMemo(() => allPaths(tree).map((p) => p.join(' / ')), [tree])
   const contentOf = (n: Note) => store.contentOf(n)
 
-  const aiStatus = useAiStatus()
-  const aiReady = aiStatus.state === 'ready'
-  const llmStatus = useLlmStatus()
-  const vectors = useNoteVectors(state.notes, contentOf, aiReady, state.plain)
+  // Notes changed: earlier AI search answers may be outdated.
+  useEffect(clearSearchCache, [state.notes])
 
   const scoped = useMemo(
     () => (selectedPath ? state.notes.filter((n) => pathStartsWith(n.path, selectedPath)) : state.notes),
     [state.notes, selectedPath],
   )
-  // With AI on, search ranks by meaning (keyword matches pinned first);
-  // otherwise it is a plain keyword filter. Locked notes can't be searched.
-  const semanticIds = useSemanticSearch(query, scoped, contentOf, vectors, aiReady)
+  // Search: notes containing the words first, then notes the AI found by
+  // meaning (D15). Locked notes can't be searched.
+  const semantic = useSemanticSearch(query)
+  const keywordHits = query.trim()
+    ? scoped.filter((n) => {
+        const c = contentOf(n)
+        return !!c && matchesQuery(n, c, query)
+      })
+    : []
   const byId = new Map(scoped.map((n) => [n.id, n]))
-  const visible = !query.trim()
-    ? scoped
-    : semanticIds
-      ? semanticIds.flatMap((id) => byId.get(id) ?? [])
-      : scoped.filter((n) => {
-          const c = contentOf(n)
-          return !!c && matchesQuery(n, c, query)
-        })
+  const keywordIds = new Set(keywordHits.map((n) => n.id))
+  const meaningHits = (semantic.ids ?? []).flatMap((id) => (keywordIds.has(id) ? [] : (byId.get(id) ?? [])))
+  const visible = !query.trim() ? scoped : [...keywordHits, ...meaningHits]
 
   async function onLockClick(path: string[]) {
     setTreeError('')
@@ -92,7 +90,6 @@ export default function NotesPage({ onLogout }: { onLogout: () => void }) {
         <header className="topbar">
           <strong>Notlar</strong>
           <div className="topbar-actions">
-            <AiToggle status={aiStatus} llm={llmStatus} />
             <button className="btn btn-ghost" onClick={onLogout} title="Çıkış"><LogOut size={14} /></button>
           </div>
         </header>
@@ -108,7 +105,7 @@ export default function NotesPage({ onLogout }: { onLogout: () => void }) {
 
         <div className="search">
           <Search size={14} className="search-icon" />
-          <input placeholder={aiReady ? 'Notlarda ara... (anlamına göre de bulur)' : 'Notlarda ara...'} value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input placeholder="Notlarda ara... (anlamına göre de bulur)" value={query} onChange={(e) => setQuery(e.target.value)} />
           {query && <button className="icon-btn search-clear" onClick={() => setQuery('')} aria-label="Temizle"><X size={13} /></button>}
         </div>
 
@@ -131,8 +128,13 @@ export default function NotesPage({ onLogout }: { onLogout: () => void }) {
 
           <section className="notes">
             {selectedPath && <div className="crumb">{selectedPath.join(' / ')}</div>}
-            {semanticIds && query.trim() && (
-              <div className="search-note"><Sparkles size={11} /> Anlamına göre sıralandı · {visible.length} sonuç</div>
+            {query.trim().length >= 2 && (
+              <div className="search-note" data-state={semantic.loading ? 'loading' : semantic.ids ? 'done' : 'off'}>
+                {semantic.loading ? <Loader2 size={11} className="spin" /> : <Sparkles size={11} />}
+                {keywordHits.length} kelime eşleşmesi
+                {semantic.ids && ` · ${meaningHits.length} anlamca ilgili`}
+                {semantic.loading && ' · AI anlamca arıyor...'}
+              </div>
             )}
             {!state.loaded ? (
               <div className="muted">Yükleniyor...</div>
@@ -157,7 +159,7 @@ export default function NotesPage({ onLogout }: { onLogout: () => void }) {
         </div>
       </main>
 
-      <Composer selectedPath={selectedPath} pathOptionsId={PATH_OPTIONS_ID} notes={state.notes} vectors={vectors} aiReady={aiReady} llmReady={llmStatus.state === 'ready'} />
+      <Composer selectedPath={selectedPath} pathOptionsId={PATH_OPTIONS_ID} />
     </>
   )
 }

@@ -1,17 +1,14 @@
-// End-to-end API tests against a real Postgres.
-// Runs only when TEST_DATABASE_URL is set (e.g. in server/.env.test).
-// WARNING: the tables in that database are emptied before the tests.
+// End-to-end API tests against a real Postgres: TEST_DATABASE_URL if set,
+// otherwise a throwaway local one (see helpers/db.js).
+// WARNING: the tables in the TEST_DATABASE_URL database are emptied.
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import pg from "pg";
 import { createApp } from "../src/app.js";
 import { hashPassword } from "../src/auth.js";
+import { startTestDb } from "./helpers/db.js";
 
-const dbUrl = process.env.TEST_DATABASE_URL;
-const opts = { skip: dbUrl ? false : "TEST_DATABASE_URL not set" };
-
-let pool, server, base, cookie;
+const opts = {};
+let db, pool, server, base, cookie;
 
 async function api(method, path, body, { auth = true } = {}) {
   const res = await fetch(base + path, {
@@ -32,10 +29,8 @@ function note(id, overrides = {}) {
 }
 
 before(async () => {
-  if (!dbUrl) return;
-  pool = new pg.Pool({ connectionString: dbUrl });
-  await pool.query(await readFile(new URL("../db/schema.sql", import.meta.url), "utf8"));
-  await pool.query("TRUNCATE notes, protected_folders");
+  db = await startTestDb();
+  pool = db.pool;
   const app = createApp({ pool, sessionSecret: "test-secret", passwordHash: await hashPassword("pw") });
   server = app.listen(0);
   base = `http://localhost:${server.address().port}`;
@@ -43,7 +38,7 @@ before(async () => {
 
 after(async () => {
   server?.close();
-  await pool?.end();
+  await db?.stop();
 });
 
 test("health and auth", opts, async () => {

@@ -1,22 +1,17 @@
 import { useMemo, useRef, useState } from 'react'
 import { Clock, ImagePlus, ListChecks, Loader2, Maximize2, Minimize2, Plus, Sparkles, X } from 'lucide-react'
-import { useCategorySuggestion, useFolderSuggestions, type NoteVectors } from '../ai/useAi'
+import { useCategorySuggestion } from '../ai/useAi'
 import { formatDate, fromLocalInput, toLocalInput } from '../lib/format'
 import { imageFilesFrom } from '../lib/images'
 import { blocksToText } from '../lib/paste'
 import { parseReminder } from '../lib/reminder'
-import { parsePath, pathKeyOf } from '../lib/tree'
-import type { Note } from '../lib/types'
+import { parsePath } from '../lib/tree'
 import { store } from '../state/store'
 import RichEditor, { type RichEditorHandle } from './RichEditor'
 
 interface Props {
   selectedPath: string[] | null
   pathOptionsId: string
-  notes: Note[]
-  vectors: NoteVectors
-  aiReady: boolean
-  llmReady: boolean
 }
 
 /** Who set the path field: AI keeps filling it until the user types or picks a folder. */
@@ -25,12 +20,13 @@ type PathSource = 'ai' | 'user' | 'selection'
 type ReminderMode = 'auto' | 'manual' | 'dismissed'
 
 // Bottom bar for writing new notes.
-// - The category model (D13) proposes a folder, existing or new; embedding
-//   suggestions (D12) are offered as alternatives.
+// - The server's AI (D15) proposes a folder, existing or new, plus similar
+//   existing folders as alternatives. It is only asked while the path is left
+//   to AI, so a chosen path (e.g. a locked folder) never sends the text anywhere.
 // - Dates in the text ("yarın 15:00") become a reminder automatically.
 // - The editor keeps pasted web content with its images, grows with the text,
 //   and has a full-screen mode for long notes.
-export default function Composer({ selectedPath, pathOptionsId, notes, vectors, aiReady, llmReady }: Props) {
+export default function Composer({ selectedPath, pathOptionsId }: Props) {
   const editor = useRef<RichEditorHandle>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [text, setText] = useState('')
@@ -57,29 +53,14 @@ export default function Composer({ selectedPath, pathOptionsId, notes, vectors, 
     }
   }
 
-  // Existing pages, most used first (the category model sees these).
-  const folders = useMemo(() => {
-    const count = new Map<string, { path: string[]; n: number }>()
-    for (const n of notes) {
-      const k = pathKeyOf(n.path)
-      count.set(k, { path: n.path, n: (count.get(k)?.n ?? 0) + 1 })
-    }
-    return [...count.values()].sort((a, b) => b.n - a.n).map((x) => x.path)
-  }, [notes])
-  const existing = useMemo(() => new Set(folders.map(pathKeyOf)), [folders])
-
-  const category = useCategorySuggestion(text, folders, llmReady)
-  const similar = useFolderSuggestions(text, notes, vectors, aiReady)
-  // Chips: the category model's answer first, then similar existing folders.
-  const chips = [
-    ...(category.path ? [{ path: category.path, isNew: !existing.has(pathKeyOf(category.path)) }] : []),
-    ...similar.filter((s) => !category.path || pathKeyOf(s.path) !== pathKeyOf(category.path)).map((s) => ({ path: s.path, isNew: false })),
-  ].slice(0, 4)
+  const category = useCategorySuggestion(text, pathSource === 'ai')
+  const result = category.result
+  // Chips: the AI's folder first, then similar existing folders.
+  const chips = result ? [{ path: result.path, isNew: result.isNew }, ...result.alternatives.map((p) => ({ path: p, isNew: false }))] : []
   // The path shown (and saved): AI's pick while the path is AI-controlled.
-  const aiPath = category.path ?? similar[0]?.path ?? null
-  const effectivePath = pathSource === 'ai' && aiPath ? aiPath.join(' / ') : path
+  const effectivePath = pathSource === 'ai' && result ? result.path.join(' / ') : path
   // Saving waits while the AI-controlled folder is still being decided for the current text.
-  const waitingForAi = pathSource === 'ai' && llmReady && category.loading
+  const waitingForAi = pathSource === 'ai' && category.loading
 
   // Reminder found in the text (recomputed only when the text changes).
   const detected = useMemo(() => parseReminder(text), [text])
@@ -163,7 +144,7 @@ export default function Composer({ selectedPath, pathOptionsId, notes, vectors, 
           <input
             className="path-input"
             list={pathOptionsId}
-            placeholder={llmReady ? 'Kategori / Klasör (AI dolduracak)' : 'Kategori / Klasör / Sayfa'}
+            placeholder="Kategori / Klasör (boş bırakırsan AI seçer)"
             value={effectivePath}
             onChange={(e) => {
               setPath(e.target.value)

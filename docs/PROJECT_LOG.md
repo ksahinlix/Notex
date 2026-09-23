@@ -35,7 +35,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 |---|----------|--------|
 | D1 | Start from scratch; the prototype is a design reference only | Active |
 | D2 | Web first, then mobile, then maybe desktop | Active |
-| D3 | AI runs in the browser; AI is for search + classification only, no chatbot | Active |
+| D3 | AI runs in the browser; AI is for search + classification only, no chatbot | Superseded by D15 (no chatbot still applies) |
 | D4 | Backend: Node.js + Express, handles storage/auth only | Active |
 | D5 | Database: Postgres on Neon (free tier) | Active |
 | D6 | Hosting: one Render web service serves both API and web app | Active |
@@ -44,8 +44,9 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D9 | Sync model: client-generated IDs, last-write-wins, soft deletes | Active |
 | D10 | Web stack: Vite + React + TypeScript; server in plain JavaScript | Active |
 | D11 | Home server is only a backup target (Phase 2) | Active |
-| D12 | Embedding model: multilingual-e5-small, opt-in, in a Web Worker | Active |
-| D13 | Category model: Gemma-2-2B via WebLLM (WebGPU) creates folders itself | Active |
+| D12 | Embedding model: multilingual-e5-small, opt-in, in a Web Worker | Superseded by D15 |
+| D13 | Category model: Gemma-2-2B via WebLLM (WebGPU) creates folders itself | Superseded by D15 (prompt kept) |
+| D15 | AI runs on the server via Cloudflare Workers AI (free tier) | Active |
 | D14 | Reminders are detected from text by a rule-based Turkish parser | Active |
 
 ### D1 — Start from scratch
@@ -265,6 +266,70 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   "React 19.2" isn't a date. Without a time, 09:00 is used; with only a time,
   today if it is still ahead, otherwise tomorrow.
 - **Not yet:** notifications when the time comes (see Open questions).
+
+### D15 — AI runs on the server via Cloudflare Workers AI (free tier)
+- **Supersedes** D3 (on-device AI), D12 and D13. From D3 the rule "search and
+  classification only, no chatbot" still applies. The D13 prompt design is
+  kept.
+- **Why the change:** the owner asked why the app is in the cloud if AI runs
+  locally, and whether every device can run it.
+  - The category model needed WebGPU and ~2 GB of GPU memory. That's fine on
+    the owner's PC, but unrealistic for most phones and impossible on the home
+    server, with a 1.5 GB download per device.
+  - The owner accepted sending note text to an AI service, since notes are
+    classified before they are locked, and locked notes are never sent.
+- **What:**
+  - `server/src/ai/`: Cloudflare client (`cloudflare.js`), prompts
+    (`prompts.js`) and features (`service.js`). Routes: `POST /api/ai/classify`
+    and `GET /api/ai/search` (login required, 40 requests/min, 503 when
+    Cloudflare isn't configured, so the app works without AI).
+  - **Folders:** Mistral Small 3.1 (24B), with Qwen3-30B as an automatic
+    backup when it fails. The existing folders come from the database. The
+    answer includes up to 3 similar existing folders (by vectors) as
+    alternatives.
+  - **Search:** bge-m3 vectors shortlist the 20 closest notes, then Mistral
+    keeps the relevant ones, best first. If that step fails, the vector order
+    is used. The browser puts exact-word matches first.
+  - **Vectors** are stored in the `note_vectors` table (REAL[], cosine
+    computed in JS, fine for one user). They are refreshed lazily when a note's
+    text changes (`text_hash`). Encrypted and deleted notes never get vectors,
+    and their rows are removed.
+  - **Privacy:** only plain notes are sent. The composer asks the AI only
+    while the path is left to AI, so a note written into a chosen (e.g. locked)
+    folder is never sent. Cloudflare says it doesn't use customer content for
+    training.
+  - **Cost control:** the composer asks ~1.2 s after typing stops, and
+    answers are cached per text. The browser test used 15 AI requests for
+    11 notes and 5 searches.
+  - The browser no longer downloads any model. The bundle shrank from
+    ~40 MB of AI assets to 266 KB total, and the ✨ AI button is gone.
+- **Measured** (scripts `server/scripts/eval-cloud-ai.mjs` and
+  `eval-cloud-search.mjs`, same Turkish notes as before):
+
+  | Folders (17 notes, empty notebook) | Sensible | Speed | Neurons/note | Free notes/day |
+  |---|---|---|---|---|
+  | **Mistral Small 3.1 24B** | **17/17** | 1.2 s | ~24 | ~425 |
+  | Llama 3.3 70B | 15/17 | 0.8 s | ~21 | ~470 |
+  | Qwen3 30B (with /no_think) | 14/17 | 0.45 s | ~4 | ~2,500 |
+  | gpt-oss-20b | 15/17 | 2.8 s | ~20 | ~500 |
+  | (browser) Gemma-2-2B | ~13/14 | 1.5–2 s | – | – |
+
+  | Search (10 queries, 20 expected notes) | Found | Extra |
+  |---|---|---|
+  | bge-m3 vectors only | 11/20 | many |
+  | **bge-m3 shortlist + Mistral re-rank** | **16/20** | 7 (mostly sensible) |
+
+  - Free allowance: 10,000 neurons/day. Searches cost ~10 neurons, and
+    vectors almost nothing.
+  - Different Workers AI models return JSON differently (a parsed object,
+    text, or OpenAI-style `choices`). `extractJson` handles all of them.
+    Qwen3 needs `/no_think`, otherwise it spends its token budget thinking.
+- **Setup:** `CLOUDFLARE_ACCOUNT_ID` (the 32 characters in the dashboard URL)
+  and `CLOUDFLARE_API_TOKEN` ("Workers AI" template, *Account Resources:
+  include your account*), in `server/.env` and in Render.
+- **Revisit when:** the free allowance isn't enough, or a better model appears
+  in Workers AI. Re-run the eval scripts. Groq's free tier is a possible
+  second provider.
 
 ---
 
@@ -540,3 +605,50 @@ aren't detected from the text.
 
 **Next:** try it with real notes; reminder notifications; learning from the
 user's folder corrections; offline-first; PWA.
+
+### 2026-09-23 — AI moves to the server (Cloudflare Workers AI, D15)
+**Why:** the category model needed a strong GPU (WebGPU, ~2 GB), so it
+couldn't run on most phones, and every device had to download 1.5 GB. The
+owner asked to run the AI in the cloud for free, and accepted that note text
+is sent there before a note is locked.
+
+**What we did:**
+- Compared the Workers AI models on the same Turkish notes. Mistral Small 3.1
+  did best (17/17 sensible folders) and is used for folders and search
+  re-ranking, with Qwen3-30B as the backup. Search uses bge-m3 vectors plus a
+  re-rank step (16/20 vs 11/20 with vectors only).
+- New server code: `src/ai/`, `routes/ai.js`, and the `note_vectors` table.
+- Removed the in-browser AI: both models, the workers, WebLLM and
+  transformers.js, and the ✨ AI button. Search shows word matches first,
+  then meaning matches.
+- Server tests now also run on Windows without a Postgres install:
+  `test/helpers/db.js` starts a throwaway database via `embedded-postgres`
+  (with the C locale: initdb rejects "Turkish_Türkiye.1252"). Before this, the
+  database tests were always skipped on the owner's PC.
+- Setup problems solved on the way: the first API token wasn't linked to the
+  account (fixed with *Account Resources*), and the Account ID in `.env` was a
+  different ID (the right one is in the dashboard URL).
+
+**How verified:**
+- Server: 16 tests, all running locally now. They cover the API with a real
+  database, the image proxy, and AI with a fake model: folder pick and
+  existing spelling, backup model, encrypted notes never sent and without
+  vectors, vectors refreshed after edits, re-rank and its fallback, login and
+  503 without configuration.
+- Web: 54 tests, plus typecheck, lint and build.
+- Browser test against the real server, real Cloudflare AI and a throwaway
+  database, starting from an empty notebook:
+  - 9 notes → 6 folders (Eğlence / İzlenecekler, Alışveriş / Market,
+    Ev / Tamirat, Yazılım / Notex, Yemek / Tarifler …); ~2.4 s per note
+    including the typing pause.
+  - Miss: "Kombi bakımı yaptırılmalı" went to a new "Araba / Bakım".
+    Ev / Tamirat was offered as the second chip.
+  - Search: "yemek" and "uygulama fikirleri" were exact. "evde bozulan
+    şeyler" missed the boiler note (because of the misfiling). "film" left out
+    the series.
+  - Reminder, a real web image through the proxy, phone width, and no page
+    errors all passed. 15 AI requests in total.
+
+**Next:** add the two Cloudflare values in Render, then deploy. Later: learn
+from the owner's folder corrections (a misfile fixed once shouldn't repeat),
+and reminder notifications.
