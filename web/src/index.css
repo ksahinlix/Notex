@@ -332,3 +332,25 @@ mark { background: #fff1a8; color: inherit; border-radius: 2px; padding: 0 1px; 
 .move-item { text-align: left; border: none; background: none; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 5px; cursor: pointer; color: var(--text); }
 .move-item:hover, .move-item:focus-visible { background: var(--accent-soft); color: var(--accent); }
 .move-item.new { color: var(--ok); }
+
+/* ---- toast ---- */
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 150px; z-index: 70; display: flex; align-items: center; gap: 10px;
+  background: #18181b; color: #fff; border-radius: 10px; padding: 10px 10px 10px 16px; font-size: 13px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25); max-width: calc(100vw - 24px); flex-wrap: wrap;
+}
+.toast.error { background: var(--danger); }
+.toast-message { overflow-wrap: anywhere; }
+.toast-action { background: none; border: none; color: #a5b4fc; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 2px 4px; }
+.toast-action:hover { text-decoration: underline; }
+.toast .icon-btn { color: #a1a1aa; }
+
+/* ---- folder menu / rename ---- */
+.folder-menu { display: flex; flex-direction: column; padding: 4px; margin: 2px 8px 4px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1); }
+.folder-menu button {
+  display: flex; align-items: center; gap: 8px; border: none; background: none; font: inherit; font-size: 13px; text-align: left;
+  padding: 6px 8px; border-radius: 5px; cursor: pointer; color: var(--text);
+}
+.folder-menu button:hover { background: var(--accent-soft); color: var(--accent); }
+.rename-input { flex: 1; min-width: 0; padding: 3px 6px; font-size: 13px; }
+.tree-label[draggable='true'] { cursor: pointer; }

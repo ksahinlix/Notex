@@ -17,6 +17,8 @@ export interface NoteContent {
   reminderLabel?: string | null
   blocks?: Block[]
   comments?: Comment[]
+  /** When the text was last edited by hand (moves and reminder changes don't count). */
+  editedAt?: string
 }
 
 export interface Note {

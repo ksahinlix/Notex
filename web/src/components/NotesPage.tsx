@@ -3,11 +3,13 @@ import { AlarmClock, Loader2, LogOut, NotebookPen, Search, Sparkles, X } from 'l
 import { clearSearchCache, useSemanticSearch } from '../ai/useAi'
 import { isReminderNote } from '../lib/agenda'
 import { queryTerms } from '../lib/highlight'
+import { folderInto, folderRenamed, noteMoveTarget } from '../lib/move'
 import { matchesQuery } from '../lib/notes'
 import { allPaths, buildTree, findProtectedAncestor, pathKeyOf, pathStartsWith } from '../lib/tree'
 import type { User } from '../lib/api'
 import type { Note } from '../lib/types'
 import { store, useNotex } from '../state/store'
+import { showToast } from '../state/toast'
 import Composer from './Composer'
 import { ConfirmHost } from './ConfirmDialog'
 import Lightbox from './Lightbox'
@@ -17,6 +19,7 @@ import Reader from './Reader'
 import RemindersPage from './RemindersPage'
 import UpcomingStrip from './UpcomingStrip'
 import Sidebar from './Sidebar'
+import { ToastHost } from './ToastHost'
 
 const PATH_OPTIONS_ID = 'notex-paths'
 
@@ -90,6 +93,38 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
     }
   }
 
+  const noteById = (id: string) => store.getSnapshot().notes.find((n) => n.id === id)
+  const show = (p: string[]) => p.join(' / ')
+
+  /** Moves a note (rule 1 unless the path was typed) and offers the alternative and undo. */
+  async function moveNote(note: Note, target: string[], exact: boolean) {
+    const from = note.path
+    const to = exact ? target : noteMoveTarget(note.path, target)
+    if (!(await store.move(note, to))) return
+    const actions = []
+    if (!exact && pathKeyOf(to) !== pathKeyOf(target)) {
+      actions.push({ label: `Sadece ${show(target)} içine koy`, run: () => void moveBack(note.id, target) })
+    }
+    actions.push({ label: 'Geri al', run: () => void moveBack(note.id, from) })
+    showToast({ message: `Taşındı: ${show(to)}`, actions })
+  }
+  async function moveBack(id: string, path: string[]) {
+    const n = noteById(id)
+    if (n) await store.move(n, path)
+  }
+
+  /** Moves or renames a folder with everything in it (rule 2). */
+  async function relocateFolder(folder: string[], newFolder: string[], undoable = true) {
+    const r = await store.moveFolder(folder, newFolder)
+    if ('error' in r) return showToast({ message: r.error, error: true })
+    if (selectedPath && pathStartsWith(selectedPath, folder)) setSelectedPath([...newFolder, ...selectedPath.slice(folder.length)])
+    showToast({
+      message: `${show(folder)} → ${show(newFolder)} (${r.moved} not)`,
+      // Undo only when nothing was merged into an existing folder.
+      actions: undoable && !r.merged ? [{ label: 'Geri al', run: () => void relocateFolder(newFolder, folder, false) }] : [],
+    })
+  }
+
   function unlockNote(n: Note) {
     const folder = findProtectedAncestor(state.folders, n.path)
     if (folder) void store.unlock(folder.pathKey)
@@ -100,6 +135,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
     <>
       <PasswordModal request={state.pwdRequest} />
       <ConfirmHost />
+      <ToastHost />
       <Lightbox src={lightbox} onClose={() => setLightbox(null)} />
       {readerNote && readerContent && (
         <Reader
@@ -163,12 +199,15 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
               selectedPath={selectedPath}
               folders={state.folders}
               keys={state.keys}
+              folderPaths={paths}
               onSelect={setSelectedPath}
               onLockClick={onLockClick}
               onDropNote={(id, path) => {
                 const n = state.notes.find((x) => x.id === id)
-                if (n) void store.move(n, path)
+                if (n) void moveNote(n, path, false)
               }}
+              onMoveFolder={(folder, parent) => void relocateFolder(folder, folderInto(folder, parent))}
+              onRenameFolder={(folder, name) => void relocateFolder(folder, folderRenamed(folder, name))}
             />
             {treeError && <div className="error" style={{ marginTop: 6 }}>{treeError}</div>}
           </div>
@@ -203,6 +242,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
                   terms={searching ? terms : undefined}
                   meaningMatch={meaningIds.has(n.id)}
                   onOpenReader={() => openReader(n.id, visible.map((x) => x.id))}
+                  onMove={(note, path, exact) => void moveNote(note, path, exact)}
                   onSelectPath={setSelectedPath}
                   onImageClick={setLightbox}
                   onUnlock={() => unlockNote(n)}

@@ -816,3 +816,45 @@ categories (not in the notes tree), and drag & drop "not working well".
     folder and drops into it; the drag state is cleared.
   - "Taşı" works both with a new path and with a picked folder.
   - Phone width works.
+
+### 2026-09-24 — Moving keeps folder names; moving and renaming folders
+**Owner request:** moving an "LSA" note from "Sistem Tasarım" into
+"Yazılım" should give "Yazılım / LSA", not just "Yazılım". Discussed first.
+The owner chose: keep the note's folder by default with a one-click
+alternative, and also move and rename whole folders.
+
+**What we did:**
+- \`lib/move.ts\` (8 tests):
+  - Rule 1: a moved note keeps its last folder name (no "LSA / LSA"; a
+    one-level note goes to the target).
+  - Rule 2: a folder moves with its whole branch; renaming is a move to the
+    same parent; a folder can't move into itself.
+- Note moves (drag onto the tree, or "Taşı" → pick a folder) follow rule 1.
+  A typed path in "Taşı" is used exactly. A toast offers "Sadece X içine koy"
+  and "Geri al".
+- Folders: drag a folder's name onto another folder (or onto "Tümü" for the
+  top level), or use "⋯" → "Yeniden adlandır" / "Taşı…". The toast shows how
+  many notes moved, with "Geri al" unless the move merged into an existing
+  folder.
+- \`store.moveFolder\` handles protected folders:
+  - A protected folder moves with its password. Its notes keep their cipher,
+    because the key comes from password + salt, not the path. Its record is
+    saved under the new path, then the old one is deleted.
+  - Notes entering or leaving a protected folder are re-encrypted after
+    asking for the password.
+  - Nesting protected folders is refused, and a cancelled password changes
+    nothing.
+- "düzenlendi" now comes from \`content.editedAt\`, set only when the text
+  changes. Moving a note no longer marks it as edited.
+
+**How verified:**
+- Web: 104 tests (new: move rules 8; store.moveFolder 6, with real
+  encryption: plain branch, merge, into itself, protected folder moves with
+  its password, a note entering protection gets encrypted, nesting and
+  cancelled password).
+- Browser, 15 checks: folder drag and undo, note drag → "Yazılım / LSA" →
+  "Sadece Yazılım içine koy", "Taşı" pick and undo, typed exact path, rename,
+  "En üst seviye", folder dropped on "Tümü", menu excludes self and
+  subfolders.
+- The earlier browser tests (24 + 24 checks) pass after updating them for
+  this batch's intended changes.

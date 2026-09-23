@@ -6,13 +6,17 @@ interface Props {
   current: string[]
   /** All folder paths, "A / B / C". */
   paths: string[]
-  onMove: (path: string[]) => void
+  /** `exact`: the user typed this path (use it as is), rather than picking a folder. */
+  onMove: (path: string[], exact?: boolean) => void
   onClose: () => void
+  /** Offer "En üst seviye" (moving a folder to the top level: onMove([])). */
+  allowTop?: boolean
+  title?: string
 }
 
 // "Taşı" popover: pick a folder from the list (filterable) or type a new
 // path. Works everywhere, including touch screens where dragging doesn't.
-export default function MoveMenu({ current, paths, onMove, onClose }: Props) {
+export default function MoveMenu({ current, paths, onMove, onClose, allowTop, title = 'Taşı' }: Props) {
   const [q, setQ] = useState('')
   const ref = useRef<HTMLDivElement>(null)
   const currentKey = current.join(' / ')
@@ -35,7 +39,7 @@ export default function MoveMenu({ current, paths, onMove, onClose }: Props) {
 
   return (
     <div className="move-menu card" ref={ref} role="dialog" aria-label="Notu taşı">
-      <div className="move-title"><FolderInput size={13} /> Taşı: <span className="muted">{currentKey}</span></div>
+      <div className="move-title"><FolderInput size={13} /> {title}: <span className="muted">{currentKey}</span></div>
       <input
         autoFocus
         placeholder="Klasör ara ya da yeni yol yaz (A / B)"
@@ -44,12 +48,15 @@ export default function MoveMenu({ current, paths, onMove, onClose }: Props) {
         onKeyDown={(e) => {
           if (e.key !== 'Enter') return
           if (matches.length && !typedIsNew) onMove(parsePath(matches[0]))
-          else if (typed.length) onMove(typed)
+          else if (typed.length) onMove(typed, true)
         }}
       />
       <div className="move-list">
+        {allowTop && !needle && (
+          <button className="move-item" onClick={() => onMove([])}>⤒ En üst seviye</button>
+        )}
         {typedIsNew && (
-          <button className="move-item new" onClick={() => onMove(typed)}>
+          <button className="move-item new" onClick={() => onMove(typed, true)}>
             + Yeni klasör: <b>{typed.join(' / ')}</b>
           </button>
         )}

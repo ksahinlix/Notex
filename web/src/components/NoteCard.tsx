@@ -25,15 +25,15 @@ interface Props {
   /** Found by meaning (AI), not by the typed words. */
   meaningMatch?: boolean
   onOpenReader: () => void
+  /** Move this note: a picked folder follows rule 1 (keeps its folder name), a typed path is exact. */
+  onMove: (note: Note, path: string[], exact: boolean) => void
   onSelectPath: (path: string[]) => void
   onImageClick: (src: string) => void
   onUnlock: () => void
 }
 
-/** More than a minute between creation and the last change counts as an edit. */
-const wasEdited = (n: Note) => Date.parse(n.updatedAt) - Date.parse(n.createdAt) > 60_000
 
-export default function NoteCard({ note, content, pathOptionsId, folderPaths, terms, meaningMatch, onOpenReader, onSelectPath, onImageClick, onUnlock }: Props) {
+export default function NoteCard({ note, content, pathOptionsId, folderPaths, terms, meaningMatch, onOpenReader, onMove, onSelectPath, onImageClick, onUnlock }: Props) {
   const [editing, setEditing] = useState(false)
   const [draftPath, setDraftPath] = useState('')
   const [draftReminder, setDraftReminder] = useState<ReminderChoice | null>(null)
@@ -77,6 +77,8 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
       blocks,
       listItemText: note.isListItem ? text : c.listItemText,
       reminderLabel: draftReminder ? c.reminderLabel || text.split('\n')[0].slice(0, 80) : null,
+      // "düzenlendi" only when the text actually changed (moving a note doesn't count)
+      editedAt: text !== c.text || JSON.stringify(blocks) !== JSON.stringify(c.blocks ?? null) ? nowIso() : c.editedAt,
     }
     setEditing(false)
     await store.update(
@@ -216,7 +218,7 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
 
           <div className="note-meta">
             {formatDate(note.createdAt)}
-            {wasEdited(note) && <span title={`Son düzenleme: ${formatDate(note.updatedAt)}`}>· düzenlendi {formatDate(note.updatedAt)}</span>}
+            {c.editedAt && <span title={`Son düzenleme: ${formatDate(c.editedAt)}`}>· düzenlendi {formatDate(c.editedAt)}</span>}
             {note.reminderAt && note.repeat ? (
               <span className="c-reminder"><Clock size={10} /> {repeatLabel(new Date(note.reminderAt), note.repeat)}</span>
             ) : note.reminderAt ? (
@@ -251,9 +253,9 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
               <MoveMenu
                 current={note.path}
                 paths={folderPaths}
-                onMove={(path) => {
+                onMove={(path, exact) => {
                   setMoving(false)
-                  void store.move(note, path)
+                  onMove(note, path, !!exact)
                 }}
                 onClose={() => setMoving(false)}
               />
