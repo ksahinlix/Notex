@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlarmClock, BookOpen, Check, ChevronDown, ChevronRight, Repeat as RepeatIcon, Trash2 } from 'lucide-react'
+import { AlarmClock, BookOpen, Check, ChevronDown, ChevronRight, Repeat as RepeatIcon, Trash2, Users } from 'lucide-react'
 import { buildAgenda, isReminderNote, type AgendaItem } from '../lib/agenda'
 import { repeatLabel } from '../lib/recurrence'
 import { pathKeyOf } from '../lib/tree'
 import type { Note, NoteContent } from '../lib/types'
+import { sharesForPath } from '../lib/sharing'
 import { confirmDialog } from '../state/confirm'
-import { store } from '../state/store'
+import { store, useNotex } from '../state/store'
 import ReminderPicker from './ReminderPicker'
+import ShareModal from './ShareModal'
 
 interface Props {
   notes: Note[]
@@ -27,14 +29,30 @@ export default function RemindersPage({ notes, contentOf, onOpenReader }: Props)
   const [category, setCategory] = useState<string | null>(null)
   const [showDone, setShowDone] = useState(false)
   const [editing, setEditing] = useState<string | null>(null) // key of the item whose picker is open
+  const [sharing, setSharing] = useState<string[] | null>(null) // path whose Paylaş dialog is open
+  const state = useNotex()
 
   const reminders = useMemo(() => notes.filter(isReminderNote), [notes])
+  // Folders on the left. A folder someone shared with you is kept separate
+  // from your own folder of the same name, and named after its owner (D18).
   const categories = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const n of reminders) if (!n.checked) m.set(pathKeyOf(n.path), (m.get(pathKeyOf(n.path)) ?? 0) + 1)
-    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], 'tr'))
-  }, [reminders])
-  const inCategory = category ? reminders.filter((n) => pathKeyOf(n.path) === category) : reminders
+    const owners = new Map(state.sharedWithMe.map((sh) => [sh.owner?.id ?? '', sh.owner?.name || sh.owner?.email?.split('@')[0] || 'Biri']))
+    const m = new Map<string, { key: string; path: string[]; label: string; mine: boolean; count: number }>()
+    for (const n of reminders) {
+      if (n.checked) continue
+      const mine = !n.ownerId || n.ownerId === state.userId
+      const key = `${mine ? '' : n.ownerId}::${pathKeyOf(n.path)}`
+      const label = (mine ? '' : `${owners.get(n.ownerId ?? '') ?? 'Biri'} · `) + n.path.join(' / ')
+      const at = m.get(key) ?? { key, path: n.path, label, mine, count: 0 }
+      at.count++
+      m.set(key, at)
+    }
+    return [...m.values()].sort((a, b) => Number(a.mine) - Number(b.mine) || a.label.localeCompare(b.label, 'tr'))
+  }, [reminders, state.sharedWithMe, state.userId])
+  const picked = categories.find((c) => c.key === category) ?? null
+  const inCategory = picked
+    ? reminders.filter((n) => `${!n.ownerId || n.ownerId === state.userId ? '' : n.ownerId}::${pathKeyOf(n.path)}` === picked.key)
+    : reminders
   const agenda = useMemo(() => buildAgenda(inCategory, now), [inCategory, now])
   const allIds = [...agenda.overdue, ...agenda.months.flatMap((m) => m.items), ...agenda.undated].map((i) => i.note.id)
   const readerList = [...new Set(allIds)]
@@ -74,7 +92,12 @@ export default function RemindersPage({ notes, contentOf, onOpenReader }: Props)
             {note.repeat && note.reminderAt && (
               <span className="agenda-repeat"><RepeatIcon size={10} /> {repeatLabel(new Date(note.reminderAt), note.repeat)}</span>
             )}
-            <button className="link agenda-cat" onClick={() => setCategory(pathKeyOf(note.path))}>{note.path.join(' / ')}</button>
+            <button
+              className="link agenda-cat"
+              onClick={() => setCategory(`${!note.ownerId || note.ownerId === state.userId ? '' : note.ownerId}::${pathKeyOf(note.path)}`)}
+            >
+              {note.path.join(' / ')}
+            </button>
           </div>
           {editing === key && (
             <div className="picker-anchor agenda-picker">
@@ -116,20 +139,43 @@ export default function RemindersPage({ notes, contentOf, onOpenReader }: Props)
       <div className="sidebar-wrap">
         <nav className="sidebar card">
           <div className={`tree-row tree-all ${!category ? 'selected' : ''}`} onClick={() => setCategory(null)}>
-            Tümü <span className="count">{categories.reduce((a, [, c]) => a + c, 0)}</span>
+            Tümü <span className="count">{categories.reduce((a, c) => a + c.count, 0)}</span>
           </div>
-          {categories.map(([key, count]) => (
-            <div key={key} className={`tree-row ${category === key ? 'selected' : ''}`} style={{ paddingLeft: 12 }} onClick={() => setCategory(key)}>
-              <span className="tree-label"><span className="ellipsis">{key.split('/').join(' / ')}</span></span>
-              <span className="count">{count}</span>
-            </div>
-          ))}
+          {categories.map((c) => {
+            // Paylaş is only for your own folders: you can't share someone
+            // else's, and a locked folder's notes are unreadable to them (D8).
+            const locked = state.folders.some((f) => f.pathKey === pathKeyOf(c.path) && !!f.pathKey)
+            const shared = sharesForPath(state.shares, c.path)
+            return (
+              <div key={c.key} className={`tree-row ${category === c.key ? 'selected' : ''}`} style={{ paddingLeft: 12 }} onClick={() => setCategory(c.key)}>
+                <span className="tree-label">
+                  <span className="ellipsis">{c.label}</span>
+                  {shared.length > 0 && <Users size={10} className="shared-badge" />}
+                </span>
+                {c.mine && !locked && (
+                  <button
+                    className="icon-btn hover-only"
+                    title="Bu klasörü paylaş"
+                    aria-label="Bu klasörü paylaş"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSharing(c.path)
+                    }}
+                  >
+                    <Users size={12} />
+                  </button>
+                )}
+                <span className="count">{c.count}</span>
+              </div>
+            )
+          })}
+          {sharing && <ShareModal path={sharing} shares={state.shares} onClose={() => setSharing(null)} />}
           {!categories.length && <div className="muted" style={{ padding: '6px 8px' }}>Henüz hatırlatma yok</div>}
         </nav>
       </div>
 
       <section className="notes agenda">
-        {category && <div className="crumb">{category.split('/').join(' / ')}</div>}
+        {picked && <div className="crumb">{picked.label}</div>}
         {empty && (
           <div className="muted empty">
             Yaklaşan hatırlatma yok. Aşağıya örneğin <b>“Kredi kartı ekstresi her ayın 28'i”</b> ya da <b>“Yarın 10'da dişçiyi hatırlat”</b> yaz.

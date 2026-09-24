@@ -431,6 +431,10 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
     shared notes anyway, because it runs in the browser over everything you
     can see; the AI half stays scoped so one person's notes never enter
     another's AI usage.
+- **Where you share from:** a folder's ⋯ menu on the Notlar page, and the
+  folder list on the Hatırlatmalar page. Both are needed: the notes tree is
+  built from ordinary notes only, so a folder holding nothing but reminders
+  has no row there.
 - **Revisit when:** people ask for read-only sharing, for single notes, or
   for their own completion state on a shared reminder.
 
@@ -1072,3 +1076,26 @@ covers ordinary notes just as well, since a shared folder holds both.
 
 **Next:** deploy after the owner tries it. Later, if wanted: single notes,
 a read-only role, real invite e-mails, per-person completion.
+
+### 2026-09-24 — Sharing a folder of reminders
+**Reported:** "can I share reminders with this method?" Yes — a shared folder
+carries its reminders — but a folder holding *only* reminders could not be
+shared at all: the Notlar sidebar is built from ordinary notes (reminders were
+taken out of the tree in September), so such a folder had no ⋯ menu, and the
+folder list on the Hatırlatmalar page was only a filter.
+
+**What we did:**
+- The Hatırlatmalar folder list got a share button of its own, opening the
+  same `ShareModal`. It only appears on folders you own and that aren't
+  locked, and a shared folder shows the same 👥 badge as in the sidebar.
+- While there: that list merged a folder someone shared with you into your own
+  folder of the same name, because it keyed only on the path. It now keys on
+  owner + path and labels a foreign folder with its owner ("kaan · Ödemeler"),
+  matching "Paylaşılan" on the notes page.
+
+**How verified:** the two-user browser test grew to 23 checks — a
+reminder-only folder is absent from the notes sidebar, can be shared from the
+Hatırlatmalar page, and the invitee then sees the reminder on her own
+Hatırlatmalar page under his name. 134 web tests, lint and build pass.
+
+**Next:** deploy.
