@@ -454,3 +454,23 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .tour-dots span.on { background: var(--accent); }
 /* the highlighted note shows its hover-only buttons */
 .tour-focus .hover-only { opacity: 1; }
+
+/* ---- Shared folders (D18) ---- */
+.shared-tree { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
+.shared-head { display: flex; align-items: center; gap: 5px; width: 100%; background: none; border: none; padding: 2px 6px 6px;
+  color: var(--text-muted); font: inherit; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; }
+.shared-row .tree-label { padding-left: 6px; }
+.shared-owner { color: var(--accent); font-weight: 500; }
+.shared-badge { color: var(--text-muted); flex: none; margin-left: 4px; }
+.invite-banner { display: flex; align-items: center; gap: 10px; }
+.invite-banner .btn { flex: none; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.modal-head h3 { margin: 0; font-size: 15px; }
+.share-invite { display: flex; gap: 8px; margin: 12px 0 8px; }
+.share-invite input { flex: 1; min-width: 0; }
+.share-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.share-list li { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 4px 0; border-top: 1px solid var(--border); }
+.share-list li .ellipsis { flex: 1; min-width: 0; }
+.c-ok { color: var(--ok); }
+.small { font-size: 12px; }
+@media (max-width: 680px) { .invite-banner { flex-wrap: wrap; } }

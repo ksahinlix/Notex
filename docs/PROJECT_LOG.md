@@ -50,6 +50,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D16 | Multiple users, "Sign in with Google" only, open sign-up with per-user limits | Active |
 | D14 | Reminders are detected from text by a rule-based Turkish parser | Active |
 | D17 | Dark mode through CSS variables; Sistem/Açık/Koyu remembered per browser | Active |
+| D18 | Folders can be shared with other people by e-mail invite; everyone invited may edit | Active |
 
 ### D1 — Start from scratch
 - **What:** New repository structure. `docs/prototype.jsx` is kept only as a
@@ -388,6 +389,52 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   variable with a light and a dark value.
 - **Revisit when:** users want the choice to follow their account across
   devices (then save it on the `users` row).
+
+---
+
+### D18 — Sharing a folder with other people
+- **Decision:** a **folder** is the unit of sharing. Everything inside it,
+  subfolders included, is shared with the people invited to it, and both
+  sides may add, edit, complete and delete.
+  - **Invited by e-mail**, before they have an account if need be: the row
+    waits until that address signs in (`linkInvites`). Nothing is shared
+    until the invitee **accepts**.
+  - **No mail is sent.** The owner copies an invite link
+    (`/davet/<token>`) and sends it themselves. Opening it while signed in
+    with the invited address accepts the invite; the same invite also shows
+    as a banner in the app.
+  - A note written in a shared folder **belongs to the folder's owner**
+    (`notes.user_id`) and records its writer (`notes.author_id`), so it
+    stays with the folder when sharing ends, and counts against the owner's
+    50 MB.
+  - Completing is **shared**: ticking a reminder off completes it for
+    everyone. That is what a shared shopping list needs.
+  - Folders shared with you are listed apart, under **"Paylaşılan"**, named
+    after their owner: you may both have an "Alışveriş", and merging them
+    would hide whose is whose.
+- **What this replaces:** "every query is scoped to `req.userId`" (D16)
+  becomes "every query covers what this user may see", which is the user's
+  own rows plus accepted shares. The rule lives in `server/src/shares.js`
+  (`VISIBLE_NOTES`, `writableOwner`, `canWriteNote`) and nowhere else,
+  and `server/test/shares.test.js` is its guard rail.
+- **Deliberately left out of the first version:**
+  - **Locked folders cannot be shared** (D8): their key is derived from a
+    password in the browser and never reaches the server, so the other person
+    would see nothing but ciphertext. Sharing also blocks locking afterwards.
+  - **No viewer role.** Everyone invited may edit. A read-only role is a
+    column away if it is ever wanted.
+  - **Single notes cannot be shared**, only folders. The `kind` column is
+    already there, so adding them later is additive.
+  - **Notes cannot change owner**, so a note cannot be moved into or out of a
+    shared folder; write it there instead. (The server answers 409.)
+  - **"Search by meaning" stays on your own notes.** Keyword search finds
+    shared notes anyway, because it runs in the browser over everything you
+    can see; the AI half stays scoped so one person's notes never enter
+    another's AI usage.
+- **Revisit when:** people ask for read-only sharing, for single notes, or
+  for their own completion state on a shared reminder.
+
+---
 
 ---
 
@@ -987,3 +1034,41 @@ reminder.
   no sideways scroll on a phone.
 
 **Next:** deploy after the owner tries it.
+
+### 2026-09-24 — Shared folders (D18)
+**What:** a folder can be shared with other people, so a shopping list or a
+payment reminder is one list for everybody. Asked for reminders first, but it
+covers ordinary notes just as well, since a shared folder holds both.
+
+- **Server:** new `shares` table and `src/shares.js`, which holds the whole
+  visibility rule; `/api/shares` (list, invite, accept, remove, move).
+  `notes.author_id` records who wrote a note. Every notes query now goes
+  through `VISIBLE_NOTES`; writing resolves the owning user first.
+  A note you may not touch answers **404, not 403**, so the reply never
+  reveals that an id is taken.
+- **Web:** `lib/sharing.ts` (pure, unit-tested) splits your own tree from
+  what others share with you; `ShareModal` invites and copies the link;
+  `SharedTree` is the "Paylaşılan" group; `InviteBanner` accepts invites,
+  including straight from an opened `/davet/<token>` link. The sidebar's
+  folder menu gained "Paylaş…", disabled for locked folders, and a shared
+  folder shows a small badge.
+- **Fixed along the way:** the folder ⋯ menu only closed on mouse-leave, so on
+  a phone (no hover) it could not be closed at all, and two menus could be
+  open at once. It now closes on an outside tap or Esc.
+
+**How verified:**
+- Server: 33 tests, 12 of them new — a pending invite grants nothing; after
+  accepting she sees that folder and no other; subfolders come along; a
+  stranger gets nothing; the owner cannot be changed; renaming the folder
+  keeps the share; withdrawing it takes effect at once and leaves her notes
+  with his folder; locked folders and self-invites are refused; an invite
+  sent before the account existed works at first sign-in; leaving a share
+  affects only that person.
+- Web: 134 tests (8 new for `lib/sharing.ts`), lint, build.
+- Browser test with **two signed-in people** against a real server and
+  Postgres, 19 checks: the whole invite → accept → shared list → shared
+  reminder → tick off → withdraw flow, that his private folder never shows,
+  that Esc closes the folder menu, and no sideways scroll on a phone.
+
+**Next:** deploy after the owner tries it. Later, if wanted: single notes,
+a read-only role, real invite e-mails, per-person completion.

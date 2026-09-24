@@ -21,8 +21,11 @@ New decisions go in the Decisions table and get their own section. Update
 ## Layout
 - `server/`: Express 5 + `pg`, plain JS ES modules, Node 22+.
   - `src/app.js` builds the app; `src/index.js` starts it.
-  - Auth (D16): Google sign-in (`auth.js`, `users.js`). Every query on notes,
-    folders and AI must be scoped to `req.userId`.
+  - Auth (D16): Google sign-in (`auth.js`, `users.js`). Every query must be
+    scoped to what the user may see: their own rows, plus folders shared with
+    them (D18). That rule lives in `src/shares.js` — use `VISIBLE_NOTES`,
+    `writableOwner` and `canWriteNote` instead of writing it again. AI stays
+    scoped to `req.userId` alone.
   - Schema in `db/schema.sql`; it must stay idempotent because it runs on
     every deploy.
   - `src/ai/`: Cloudflare Workers AI client, prompts, folder + search

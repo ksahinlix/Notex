@@ -1,6 +1,6 @@
 // Thin client for the Notex server API. Cookies carry the login session.
 
-import type { Note, ProtectedFolder } from './types'
+import type { Note, ProtectedFolder, Share } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -50,6 +50,14 @@ export const api = {
   /** Create or replace. Rejects with status 409 if the server has a newer version. */
   saveNote: (note: Note) => request<Note>('PUT', `/api/notes/${encodeURIComponent(note.id)}`, note),
   deleteNote: (id: string) => request<null>('DELETE', `/api/notes/${encodeURIComponent(id)}`),
+
+  // Shared folders (D18).
+  listShares: () => request<{ mine: Share[]; withMe: Share[] }>('GET', '/api/shares'),
+  createShare: (path: string[], email: string) => request<Share>('POST', '/api/shares', { path, email }),
+  acceptShare: (by: { token: string } | { id: string }) => request<Share>('POST', '/api/shares/accept', by),
+  removeShare: (id: string) => request<null>('DELETE', `/api/shares/${encodeURIComponent(id)}`),
+  /** Keeps shares on a folder the owner renamed or moved. */
+  moveShares: (from: string[], to: string[]) => request<{ moved: number }>('POST', '/api/shares/move', { from, to }),
 
   listProtectedFolders: () => request<{ folders: ProtectedFolder[] }>('GET', '/api/protected-folders'),
   saveProtectedFolder: (f: ProtectedFolder) =>

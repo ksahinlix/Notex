@@ -12,6 +12,7 @@ import { aiRouter } from "./routes/ai.js";
 import { imageProxyRouter } from "./routes/imageProxy.js";
 import { notesRouter } from "./routes/notes.js";
 import { protectedFoldersRouter } from "./routes/protectedFolders.js";
+import { sharesRouter } from "./routes/shares.js";
 
 // Builds the Express app. Kept separate from index.js so tests can create it
 // with their own database and secrets.
@@ -70,6 +71,7 @@ export function createApp({
   const auth = requireAuth(sessionSecret);
   app.use("/api/notes", auth, notesRouter(pool));
   app.use("/api/protected-folders", auth, protectedFoldersRouter(pool));
+  app.use("/api/shares", auth, sharesRouter(pool, { findUser }));
   app.use("/api/image-proxy", auth, imageProxyRouter(imageProxy));
   app.use("/api/ai", auth, aiRouter(aiService, { pool, dailyLimit: aiDailyLimit }));
   app.use("/api", (_req, res) => res.status(404).json({ error: "not found" }));

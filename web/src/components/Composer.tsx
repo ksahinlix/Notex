@@ -14,6 +14,8 @@ import RichEditor, { type RichEditorHandle } from './RichEditor'
 interface Props {
   selectedPath: string[] | null
   pathOptionsId: string
+  /** Set while a folder shared with you is open: the note becomes its owner's (D18). */
+  sharedOwnerId?: string
 }
 
 /** Who set the path field: AI keeps filling it until the user types or picks a folder. */
@@ -29,7 +31,7 @@ type ReminderMode = 'auto' | 'manual' | 'dismissed'
 //   reminder automatically; the clock button sets one by hand.
 // - The editor keeps pasted web content with its images, grows with the text,
 //   and has a full-screen mode for long notes.
-export default function Composer({ selectedPath, pathOptionsId }: Props) {
+export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }: Props) {
   const editor = useRef<RichEditorHandle>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [text, setText] = useState('')
@@ -112,6 +114,7 @@ export default function Composer({ selectedPath, pathOptionsId }: Props) {
         comments: [],
       },
       { isListItem, reminderAt, isReminder: !!reminder, repeat: reminder?.repeat ?? null },
+      sharedOwnerId,
     )
     setBusy(false)
     if (!ok) return setError('Şifre girilmeden bu klasöre kaydedilemez.')

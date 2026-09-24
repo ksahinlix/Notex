@@ -545,6 +545,7 @@ Notex/
         │   ├── highlight.ts     search-word highlighting
         │   ├── format.ts        date formatting
         │   ├── google.ts        loads Google's sign-in script
+        │   ├── sharing.ts       shared folders: grouping, invite links
         │   ├── theme.ts         Sistem/Açık/Koyu: save, load, apply
         │   └── tour.ts          guided tour steps
         ├── state/           app-wide state
@@ -565,13 +566,16 @@ Notex/
             ├── ReminderPicker.tsx time/repeat popover
             ├── Reader.tsx       full-screen reading mode
             ├── Tour.tsx         guided tour
+            ├── ShareModal.tsx   invite someone to a folder
+            ├── SharedTree.tsx   the "Paylaşılan" group in the sidebar
+            ├── InviteBanner.tsx accept an invitation
             ├── ThemeToggle.tsx  header button that switches the theme
             ├── PasswordModal.tsx, ConfirmDialog.tsx, ToastHost.tsx, Lightbox.tsx
 ```
 
 **A pattern worth copying:** logic lives in `lib/` as small **pure
 functions** (input → output, no screen, no network). Components stay thin.
-That's why most of the 111 web tests don't need a browser.
+That's why most of the 134 web tests don't need a browser.
 
 ---
 
@@ -863,7 +867,44 @@ the strip (and its "Tümü" link) never disappears while reminders exist.
   folder opens it, and **Taşı** works on touch screens where HTML5 drag &
   drop doesn't.
 
-### 6.10 Smaller features
+### 6.10 Sharing a folder with someone (D18)
+
+*Files: `server/src/shares.js`, `server/src/routes/shares.js`,
+`lib/sharing.ts`, `ShareModal.tsx`, `SharedTree.tsx`, `InviteBanner.tsx`.*
+
+The unit is a **folder**. Invite someone by e-mail from the folder's ⋯ menu;
+they get everything inside it, subfolders included, and may add, edit,
+complete and delete. Ticking a reminder off completes it for everyone.
+
+**How an invite travels without an e-mail server:** the invite row names the
+invitee by address and carries a random token. The owner copies the link
+`/davet/<token>` and sends it themselves (WhatsApp, anything). Opening it
+while signed in with that address accepts the invite. If the person has no
+account yet, the row simply waits: `linkInvites` attaches it the first time
+that e-mail signs in. **Nothing is shared until the invite is accepted.**
+
+**The rule that keeps people apart** used to be "every query is scoped to
+`req.userId`". It is now "every query covers what this user may see", and it
+lives in one file, `server/src/shares.js`:
+
+- `VISIBLE_NOTES` — the SQL for reading: your own notes, plus notes whose
+  path starts with a folder shared with you (`n.path[1:cardinality(s.path)]
+  = s.path`) by an **accepted** share.
+- `writableOwner` / `canWriteNote` — the check before writing. A new note
+  in a shared folder belongs to the **folder's owner** and records its writer
+  in `author_id`, so it stays with the folder if sharing ends, and counts
+  against the owner's 50 MB.
+
+Because you and a friend may both have an "Alışveriş", the request says whose
+folder is meant (`ownerId`), and shared folders are listed apart under
+**"Paylaşılan"** with the owner's name instead of being merged into your tree.
+
+Three limits worth knowing: a **locked folder cannot be shared** (its key
+never leaves the browser, so the other person would see only ciphertext), a
+note **cannot change owner** (write it in the shared folder rather than moving
+it there), and **everyone invited may edit** — there is no read-only role yet.
+
+### 6.11 Smaller features
 
 - **Reading mode** (`Reader.tsx`): a 760 px serif "page", A−/A+ (remembered),
   ← → between notes, Esc.
@@ -912,7 +953,7 @@ the strip (and its "Tümü" link) never disappears while reminders exist.
 
 | Layer | Tool | Command | What it covers |
 |---|---|---|---|
-| Web logic | Vitest | `cd web && npm test` | 111 tests: parser, recurrence, agenda, move rules, crypto, tree, paste, theme, store (incl. folder moves with real encryption) |
+| Web logic | Vitest | `cd web && npm test` | 134 tests: parser, recurrence, agenda, move rules, crypto, tree, paste, theme, sharing, store (incl. folder moves with real encryption) |
 | Web types & style | tsc, oxlint | `npm run build`, `npm run lint` | type errors, suspicious code |
 | Server API | node:test + embedded-postgres | `cd server && npm test` | 22 tests: login, isolation between users, sync/409, quotas, reminders, AI with a fake model, image proxy |
 | The real app | Playwright (scratch scripts) | — | clicked through each feature in Chrome, desktop + phone width |

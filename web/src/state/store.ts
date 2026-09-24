@@ -11,7 +11,7 @@ import { createProtectedFolder, unlockFolder } from '../lib/crypto'
 import { newNote, nowIso, open, seal } from '../lib/notes'
 import { folderMoveError, pathAfterFolderMove } from '../lib/move'
 import { findProtectedAncestor, pathKeyOf, pathStartsWith } from '../lib/tree'
-import type { Note, NoteContent, ProtectedFolder } from '../lib/types'
+import type { Note, NoteContent, ProtectedFolder, Share } from '../lib/types'
 
 export interface PasswordRequest {
   mode: 'set' | 'unlock'
@@ -25,6 +25,12 @@ export interface State {
   loaded: boolean
   notes: Note[]
   folders: ProtectedFolder[]
+  /** Folders you share with someone (D18). */
+  shares: Share[]
+  /** Folders others share with you, accepted or still waiting. */
+  sharedWithMe: Share[]
+  /** The signed-in user, so foreign notes can be told apart. */
+  userId: string | null
   /** pathKey -> folder key, only while unlocked. Never persisted. */
   keys: Record<string, CryptoKey>
   /** noteId -> decrypted content of encrypted notes, only while unlocked. */
@@ -33,7 +39,7 @@ export interface State {
   pwdRequest: PasswordRequest | null
 }
 
-const initial: State = { loaded: false, notes: [], folders: [], keys: {}, plain: {}, syncError: '', pwdRequest: null }
+const initial: State = { loaded: false, notes: [], folders: [], shares: [], sharedWithMe: [], userId: null, keys: {}, plain: {}, syncError: '', pwdRequest: null }
 
 const byNewest = (a: Note, b: Note) => b.createdAt.localeCompare(a.createdAt)
 
@@ -66,10 +72,10 @@ export class NotexStore {
 
   // ---- loading & saving ----
 
-  async load() {
+  async load(userId?: string) {
     try {
-      const [n, f] = await Promise.all([api.listNotes(), api.listProtectedFolders()])
-      this.set({ notes: n.notes.sort(byNewest), folders: f.folders, loaded: true, syncError: '' })
+      const [n, f, s] = await Promise.all([api.listNotes(), api.listProtectedFolders(), api.listShares()])
+      this.set({ notes: n.notes.sort(byNewest), folders: f.folders, shares: s.mine, sharedWithMe: s.withMe, userId: userId ?? this.state.userId, loaded: true, syncError: '' })
     } catch {
       this.set({ loaded: true, syncError: 'Notlar yüklenemedi. Sayfayı yenilemeyi dene.' })
     }
@@ -244,10 +250,12 @@ export class NotexStore {
     path: string[],
     content: NoteContent,
     meta: { isListItem?: boolean; reminderAt?: string | null; isReminder?: boolean; repeat?: Note['repeat'] },
+    /** Set when writing into a folder someone shared with you: it becomes theirs. */
+    ownerId?: string,
   ): Promise<boolean> {
     const { ok, key } = await this.keyForPath(path)
     if (!ok) return false
-    const sealed = await seal(newNote(path, meta), content, key)
+    const sealed = await seal({ ...newNote(path, meta), ownerId: ownerId ?? this.state.userId ?? undefined }, content, key)
     this.upsertLocal(sealed, content)
     void this.push(sealed)
     return true
@@ -357,7 +365,66 @@ export class NotexStore {
     }
 
     for (const r of renamed) void api.deleteProtectedFolder(r.old.pathKey).catch(() => {})
+    // Shares point at a folder path, so they have to follow it (D18).
+    if (this.state.shares.some((sh) => pathStartsWith(sh.path, folder))) {
+      try {
+        await api.moveShares(folder, newFolder)
+        await this.refreshShares()
+      } catch {
+        this.set({ syncError: 'Paylaşım yeni klasör adına taşınamadı.' })
+      }
+    }
     return { moved: plans.length, merged }
+  }
+
+  // ---- sharing (D18) ----
+
+  private async refreshShares() {
+    const s = await api.listShares()
+    this.set({ shares: s.mine, sharedWithMe: s.withMe })
+  }
+
+  /** Invites someone to a folder. Returns the invite (with its link token) or an error. */
+  async share(path: string[], email: string): Promise<{ share: Share } | { error: string }> {
+    try {
+      const share = await api.createShare(path, email)
+      await this.refreshShares()
+      return { share }
+    } catch (err) {
+      const msg = err instanceof ApiError ? String((err.body as { error?: string })?.error ?? '') : ''
+      if (msg.includes('locked')) return { error: 'Şifreli klasörler paylaşılamaz.' }
+      if (msg.includes('that is you')) return { error: 'Bu senin adresin.' }
+      if (msg.includes('email')) return { error: 'Geçerli bir e-posta adresi yaz.' }
+      return { error: 'Paylaşım oluşturulamadı. Tekrar dene.' }
+    }
+  }
+
+  /** The owner withdraws a share, or you leave one you were given. */
+  async unshare(id: string): Promise<boolean> {
+    try {
+      await api.removeShare(id)
+      await this.refreshShares()
+      this.set({ notes: this.state.notes.filter((n) => !n.ownerId || n.ownerId === this.state.userId || this.canSee(n)) })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private canSee(note: Note) {
+    return this.state.sharedWithMe.some((s) => s.status === 'accepted' && s.owner?.id === note.ownerId && pathStartsWith(note.path, s.path))
+  }
+
+  /** Accepts an invite, by link token or from the banner, and loads what it opens. */
+  async acceptInvite(by: { token: string } | { id: string }): Promise<{ share: Share } | { error: string }> {
+    try {
+      const share = await api.acceptShare(by)
+      await this.load()
+      return { share }
+    } catch (err) {
+      const status = err instanceof ApiError ? err.status : 0
+      return { error: status === 404 ? 'Bu davet bu hesap için değil. Davet edilen e-posta ile giriş yap.' : 'Davet kabul edilemedi.' }
+    }
   }
 
   /** Moves one note. Returns false if nothing moved (same place, locked, or password cancelled). */

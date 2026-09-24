@@ -4,6 +4,7 @@ import { clearSearchCache, useSemanticSearch } from '../ai/useAi'
 import { isReminderNote } from '../lib/agenda'
 import { queryTerms } from '../lib/highlight'
 import { markTourDone, tourDone } from '../lib/tour'
+import { isSharedPath, ownNotes, sharedFolders } from '../lib/sharing'
 import { folderInto, folderRenamed, noteMoveTarget } from '../lib/move'
 import { matchesQuery } from '../lib/notes'
 import { allPaths, buildTree, findProtectedAncestor, pathKeyOf, pathStartsWith } from '../lib/tree'
@@ -20,6 +21,8 @@ import Reader from './Reader'
 import RemindersPage from './RemindersPage'
 import UpcomingStrip from './UpcomingStrip'
 import Sidebar from './Sidebar'
+import SharedTree from './SharedTree'
+import InviteBanner from './InviteBanner'
 import { ToastHost } from './ToastHost'
 import ThemeToggle from './ThemeToggle'
 import Tour from './Tour'
@@ -32,6 +35,8 @@ const viewFromHash = (): View => (location.hash === '#hatirlatmalar' ? 'reminder
 export default function NotesPage({ user, onLogout }: { user: User; onLogout: () => void }) {
   const state = useNotex()
   const [selectedPath, setSelectedPath] = useState<string[] | null>(null)
+  /** The folder picked under "Paylaşılan", if any (D18). */
+  const [sharedPick, setSharedPick] = useState<{ ownerId: string; path: string[] } | null>(null)
   const [query, setQuery] = useState('')
   // Reader: the open note and the list ← → moves through.
   const [reader, setReader] = useState<{ id: string; list: string[] } | null>(null)
@@ -53,12 +58,21 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
   }
 
   useEffect(() => {
-    void store.load()
-  }, [])
+    void store.load(user.id)
+  }, [user.id])
+
+  // Your own tree holds your own notes; folders shared with you are listed
+  // apart, under "Paylaşılan" (D18).
+  const mine = useMemo(() => ownNotes(state.notes, user.id), [state.notes, user.id])
+  const shared = useMemo(() => sharedFolders(state.notes, state.sharedWithMe), [state.notes, state.sharedWithMe])
+  const sharedNotes = useMemo(
+    () => (sharedPick ? (shared.find((f) => f.ownerId === sharedPick.ownerId && f.path.join('/') === sharedPick.path.join('/'))?.notes ?? []) : []),
+    [shared, sharedPick],
+  )
 
   // Reminders live on their own page, not in the notes tree or list.
-  const plainNotes = useMemo(() => state.notes.filter((n) => !isReminderNote(n)), [state.notes])
-  const reminderCount = state.notes.length - plainNotes.length
+  const plainNotes = useMemo(() => mine.filter((n) => !isReminderNote(n)), [mine])
+  const reminderCount = state.notes.length - state.notes.filter((n) => !isReminderNote(n)).length
   const tree = useMemo(() => buildTree(plainNotes), [plainNotes])
   const paths = useMemo(() => allPaths(tree).map((p) => p.join(' / ')), [tree])
   const contentOf = (n: Note) => store.contentOf(n)
@@ -67,8 +81,13 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
   useEffect(clearSearchCache, [state.notes])
 
   const scoped = useMemo(
-    () => (selectedPath ? plainNotes.filter((n) => pathStartsWith(n.path, selectedPath)) : plainNotes),
-    [plainNotes, selectedPath],
+    () =>
+      sharedPick
+        ? sharedNotes.filter((n) => !isReminderNote(n))
+        : selectedPath
+          ? plainNotes.filter((n) => pathStartsWith(n.path, selectedPath))
+          : plainNotes,
+    [plainNotes, selectedPath, sharedPick, sharedNotes],
   )
   // Search covers ALL notes (not just the selected folder): notes containing
   // the words first, then notes the AI found by meaning (D15). Locked notes
@@ -95,6 +114,10 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
   async function onLockClick(path: string[]) {
     setTreeError('')
     const pk = pathKeyOf(path)
+    // A shared folder can't be locked: the key never leaves this browser, so
+    // the other person would see nothing but ciphertext (D8, D18).
+    if (isSharedPath(state.shares, path) && !state.folders.some((f) => f.pathKey === pk))
+      return setTreeError('Paylaşılan klasör şifrelenemez. Önce paylaşımı kaldır.')
     if (!state.folders.some((f) => f.pathKey === pk)) {
       const err = await store.protect(path)
       if (err) setTreeError(err)
@@ -210,6 +233,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
           <RemindersPage notes={state.notes} contentOf={contentOf} onOpenReader={openReader} />
         ) : (
           <>
+        <InviteBanner invites={state.sharedWithMe} />
         <UpcomingStrip notes={state.notes} contentOf={contentOf} onShowAll={() => setView('reminders')} />
 
         <div className="search" data-tour="search">
@@ -226,7 +250,11 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
               folders={state.folders}
               keys={state.keys}
               folderPaths={paths}
-              onSelect={setSelectedPath}
+              shares={state.shares}
+              onSelect={(p) => {
+                setSelectedPath(p)
+                setSharedPick(null)
+              }}
               onLockClick={onLockClick}
               onDropNote={(id, path) => {
                 const n = state.notes.find((x) => x.id === id)
@@ -234,6 +262,14 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
               }}
               onMoveFolder={(folder, parent) => void relocateFolder(folder, folderInto(folder, parent))}
               onRenameFolder={(folder, name) => void relocateFolder(folder, folderRenamed(folder, name))}
+            />
+            <SharedTree
+              folders={shared}
+              selected={sharedPick}
+              onSelect={(pick) => {
+                setSharedPick(pick)
+                if (pick) setSelectedPath(null)
+              }}
             />
             {treeError && <div className="error" style={{ marginTop: 6 }}>{treeError}</div>}
           </div>
@@ -282,7 +318,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
         )}
       </main>
 
-      <Composer selectedPath={selectedPath} pathOptionsId={PATH_OPTIONS_ID} />
+      <Composer selectedPath={sharedPick ? sharedPick.path : selectedPath} pathOptionsId={PATH_OPTIONS_ID} sharedOwnerId={sharedPick?.ownerId} />
     </>
   )
 }
