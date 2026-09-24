@@ -787,13 +787,20 @@ free, testable, and date arithmetic is exactly what small models get wrong.
 1. **Repeats**: "her ayın 28'i", "her pazartesi 10:00", "her gün 8'de",
    "her yıl 5 Mart", "aylık/haftalık/günlük/yıllık" → a rule + the first date.
 2. **Dates/times**: "yarın 15:00", "perşembe akşam 7'de", "3 gün sonra",
-   "25 Ekim'de", "30.09", "yarım saat sonra".
+   "25 Ekim'de", "30.09", "yarım saat sonra", and a day of the month with no
+   month name: "ayın 26'sında", "gelecek ayın 3'ünde", plain "26'sında"
+   (this month, or the next month that has that day).
 3. **Reminder words** without a date: "hatırlat", "unutma", "remind…" →
    an **undated** reminder.
 
+Any note with a date in it becomes a reminder; the keywords are only needed
+when there is no date.
+
 Details that needed care: JavaScript's `\b` doesn't understand Turkish letters
 (we use Unicode-aware boundaries); "React 19.2" must not become 19 February;
-"31'i" must match 31, not 3.
+"31'i" must match 31, not 3. For a bare day of the month the possessive plus
+"-de" is required ("26'sında"), so "bu ay 3 kitap okudum" and "sayfa 26'da"
+stay ordinary notes.
 
 **Repeats** (`recurrence.ts`): the first date is the *anchor*
 (`reminderAt`); the k-th monthly occurrence is the same day k months later,
@@ -805,6 +812,14 @@ that one disappears.
 missed repeat), the **next 6 months by month** (monthly/yearly: every
 occurrence; weekly: next 4 weeks; daily: next one only — otherwise a daily
 pill fills 180 rows), Tarihsiz, Tamamlananlar.
+
+**The "Yaklaşan" strip** on the notes page (`stripItems` in `agenda.ts`)
+shows everything overdue, **every undated reminder**, and the coming 7 days.
+Reminder notes are deliberately not in the note list, so the strip is the
+only thing standing between a reminder and being forgotten: an undated one
+has no date to bring it back, so it stays until it is ticked off or given a
+time. If nothing falls in the week, the next reminder is shown anyway, so
+the strip (and its "Tümü" link) never disappears while reminders exist.
 
 ### 6.8 Writing, pasting web content, images
 

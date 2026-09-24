@@ -71,6 +71,20 @@ describe('parseReminder', () => {
     expect(at(text)).toBe(first)
   })
 
+  // A day of the month with the month left out. Today is Wed 23 Sep 2026.
+  it.each([
+    ["ayın 26'sında sinemaya gideceğiz", '2026-09-26 09:00'],
+    ["ayın 26'sı sinemaya gideceğiz", '2026-09-26 09:00'],
+    ["26'sında sinemaya gideceğiz", '2026-09-26 09:00'],
+    ["ayın 20'sinde fatura", '2026-10-20 09:00'], // already past -> next month
+    ["gelecek ayın 3'ünde toplantı", '2026-10-03 09:00'],
+    ["ayın 31'inde maaş", '2026-10-31 09:00'], // September has no 31st
+    ["bu ayın 25'inde 14:30 kontrol", '2026-09-25 14:30'],
+    ['ayın 28 günü kira', '2026-09-28 09:00'],
+  ])('%s -> %s', (text, expected) => {
+    expect(at(text)).toBe(expected)
+  })
+
   it('one-time reminders have no repeat', () => {
     expect(parseReminder('Yarın 15:00 diş hekimi', NOW)?.repeat).toBeUndefined()
   })
@@ -88,6 +102,9 @@ describe('parseReminder', () => {
     'React 19.2 sürümüne geç',
     'Sabahattin Ali kitapları',
     'Günaydın mesajı',
+    'Bu ay 3 kitap okudum',      // no suffix: a count, not a date
+    'Kitabın 26. sayfasında kaldım',
+    "Sepetteki 3'ü indirimli", // possessive without "-de": not a date
   ])('no reminder in: %s', (text) => {
     expect(parseReminder(text, NOW)).toBeNull()
   })
