@@ -1,0 +1,85 @@
+// Shared folders (D18), the browser's half.
+//
+// A note now carries `ownerId`: yours, or the owner of a folder somebody
+// shared with you. Your own tree is built from your own notes only; shared
+// folders are shown apart, under "Paylaşılan", because you may both have an
+// "Alışveriş" and merging them would be a lie.
+
+import type { Note, Share } from './types'
+import { pathStartsWith } from './tree'
+
+/** One shared folder as it appears in the sidebar. */
+export interface SharedFolder {
+  share: Share
+  /** The folder's path inside the owner's tree. */
+  path: string[]
+  ownerId: string
+  /** "Kaan" (or the e-mail, before they have a name). */
+  ownerName: string
+  notes: Note[]
+}
+
+export const accepted = (shares: Share[]) => shares.filter((s) => s.status === 'accepted')
+export const pending = (shares: Share[]) => shares.filter((s) => s.status === 'pending')
+
+const personName = (p: { name: string | null; email: string } | undefined) => p?.name || p?.email?.split('@')[0] || 'Biri'
+
+/** Your own notes: the ones nobody shared with you. */
+export function ownNotes(notes: Note[], userId: string | null): Note[] {
+  return notes.filter((n) => !n.ownerId || !userId || n.ownerId === userId)
+}
+
+/** The folders shared with you, each with the notes inside it. */
+export function sharedFolders(notes: Note[], withMe: Share[]): SharedFolder[] {
+  return accepted(withMe)
+    .filter((s) => s.owner)
+    .map((s) => ({
+      share: s,
+      path: s.path,
+      ownerId: s.owner!.id ?? '',
+      ownerName: personName(s.owner),
+      notes: notes.filter((n) => n.ownerId === s.owner!.id && pathStartsWith(n.path, s.path)),
+    }))
+    .sort((a, b) => a.ownerName.localeCompare(b.ownerName, 'tr') || a.path.join('/').localeCompare(b.path.join('/'), 'tr'))
+}
+
+/** The share a note belongs to, if it is in a folder shared with you. */
+export function shareOf(note: Note, withMe: Share[], userId: string | null): Share | null {
+  if (!note.ownerId || note.ownerId === userId) return null
+  return accepted(withMe).find((s) => s.owner?.id === note.ownerId && pathStartsWith(note.path, s.path)) ?? null
+}
+
+/** Whose folder a new note written at `path` goes to: null = your own. */
+export function ownerForNewNote(path: string[], withMe: Share[], target?: { ownerId: string; path: string[] }): string | null {
+  if (!target) return null
+  const share = accepted(withMe).find((s) => s.owner?.id === target.ownerId && pathStartsWith(path, s.path))
+  return share ? target.ownerId : null
+}
+
+/** People who can see a folder of yours (its own share plus any parent's). */
+export function sharesForPath(mine: Share[], path: string[]): Share[] {
+  return mine.filter((s) => pathStartsWith(path, s.path))
+}
+
+/** The folder is shared, or sits inside a shared one, so it cannot be locked. */
+export const isSharedPath = (mine: Share[], path: string[]) =>
+  mine.some((s) => pathStartsWith(path, s.path) || pathStartsWith(s.path, path))
+
+const INVITE = '/davet/'
+
+export const inviteLink = (token: string) => `${location.origin}${INVITE}${token}`
+
+/** The token in /davet/<token>, or null. Also accepts it as a #davet=… hash. */
+export function inviteTokenFrom(url: { pathname: string; hash: string }): string | null {
+  if (url.pathname.startsWith(INVITE)) return decodeURIComponent(url.pathname.slice(INVITE.length)).replace(/\/+$/, '') || null
+  const m = /^#davet=(.+)$/.exec(url.hash)
+  return m ? decodeURIComponent(m[1]) : null
+}
+
+/** Turkish summary of who a folder is shared with, for the sidebar tooltip. */
+export function shareSummary(shares: Share[]): string {
+  if (!shares.length) return ''
+  const names = shares.map((s) => personName(s.person ?? { name: null, email: s.invitedEmail }))
+  const waiting = shares.filter((s) => s.status === 'pending').length
+  return `${names.join(', ')} ile paylaşıldı${waiting ? ` (${waiting} bekliyor)` : ''}`
+}

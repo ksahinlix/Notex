@@ -96,3 +96,34 @@ ALTER TABLE notes ADD COLUMN IF NOT EXISTS is_reminder BOOLEAN NOT NULL DEFAULT 
 -- reminder_at. reminder_done_until: occurrences up to this time are done.
 ALTER TABLE notes ADD COLUMN IF NOT EXISTS reminder_repeat TEXT;
 ALTER TABLE notes ADD COLUMN IF NOT EXISTS reminder_done_until TIMESTAMPTZ;
+
+-- ---- Shared folders (D18) ----------------------------------------------
+
+-- One row per person a folder is shared with. `path` is the folder inside the
+-- owner's tree, e.g. {'Alışveriş'}; everything under it is shared. The
+-- invitee is named by e-mail, so they can be invited before they have an
+-- account: invited_user_id is filled in when that e-mail signs in.
+-- `kind` is 'folder' today; single notes would add 'note' without a rewrite.
+CREATE TABLE IF NOT EXISTS shares (
+  id              TEXT PRIMARY KEY,
+  owner_id        TEXT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind            TEXT        NOT NULL DEFAULT 'folder',
+  path            TEXT[]      NOT NULL,
+  invited_email   TEXT        NOT NULL,
+  invited_user_id TEXT        REFERENCES users(id) ON DELETE CASCADE,
+  -- 'pending' until the invitee accepts; only 'accepted' grants access.
+  status          TEXT        NOT NULL DEFAULT 'pending',
+  -- Random secret in the invite link. Whoever opens it still has to sign in
+  -- with the invited e-mail, so the link alone gives nothing away.
+  token           TEXT        NOT NULL UNIQUE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  accepted_at     TIMESTAMPTZ
+);
+-- One invite per folder per person (e-mail case is ignored).
+CREATE UNIQUE INDEX IF NOT EXISTS shares_owner_path_email_idx ON shares (owner_id, path, lower(invited_email));
+CREATE INDEX IF NOT EXISTS shares_invited_idx ON shares (invited_user_id) WHERE status = 'accepted';
+CREATE INDEX IF NOT EXISTS shares_email_idx ON shares (lower(invited_email));
+
+-- Who wrote a note. The note itself belongs to the folder's owner (user_id),
+-- so it stays with the folder when sharing stops.
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS author_id TEXT REFERENCES users(id);

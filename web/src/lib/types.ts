@@ -38,9 +38,34 @@ export interface Note {
   repeat?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null
   /** Repeating reminder: occurrences up to this time are done. */
   reminderDoneUntil?: string | null
+  /** Who the note belongs to: the owner of the folder it lives in (D18). */
+  ownerId?: string
+  /** Who wrote it — different from ownerId in a folder someone shared with you. */
+  authorId?: string
   createdAt: string
   updatedAt: string
   deletedAt?: string | null
+}
+
+/** A folder shared with someone (D18). */
+export interface Share {
+  id: string
+  path: string[]
+  invitedEmail: string
+  status: 'pending' | 'accepted'
+  token: string
+  createdAt: string
+  /** The invitee, once they have an account. */
+  person: Person | null
+  /** Set on shares made *with* you: whose folder it is. */
+  owner?: Person
+}
+
+export interface Person {
+  id: string | null
+  name: string | null
+  email: string
+  picture: string | null
 }
 
 export interface ProtectedFolder {

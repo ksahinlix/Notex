@@ -1,7 +1,9 @@
-import { useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, FolderInput, Lock, LockOpen, MoreHorizontal, Pencil } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ChevronDown, ChevronRight, FolderInput, Lock, LockOpen, MoreHorizontal, Pencil, Users } from 'lucide-react'
 import { pathKeyOf, pathStartsWith, type TreeNode } from '../lib/tree'
-import type { ProtectedFolder } from '../lib/types'
+import { sharesForPath, shareSummary } from '../lib/sharing'
+import type { ProtectedFolder, Share } from '../lib/types'
+import ShareModal from './ShareModal'
 import MoveMenu from './MoveMenu'
 
 const NOTE_TYPE = 'text/notex-note'
@@ -12,6 +14,8 @@ interface Props {
   selectedPath: string[] | null
   folders: ProtectedFolder[]
   keys: Record<string, CryptoKey>
+  /** Folders you share with someone, for the badge and the Paylaş dialog (D18). */
+  shares: Share[]
   /** All folder paths "A / B", for the folder "Taşı" menu. */
   folderPaths: string[]
   onSelect: (path: string[] | null) => void
@@ -91,9 +95,10 @@ export default function Sidebar({ tree, selectedPath, onSelect, ...rest }: Props
 }
 
 function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path: string[]; depth: number }) {
-  const { name, node, path, depth, selectedPath, folders, keys, folderPaths, onSelect, onLockClick, onDropNote, onMoveFolder, onRenameFolder } = props
+  const { name, node, path, depth, selectedPath, folders, keys, shares, folderPaths, onSelect, onLockClick, onDropNote, onMoveFolder, onRenameFolder } = props
   const [open, setOpen] = useState(depth < 1)
-  const [menu, setMenu] = useState<null | 'menu' | 'move' | 'rename'>(null)
+  const [menu, setMenu] = useState<null | 'menu' | 'move' | 'rename' | 'share'>(null)
+  const shared = sharesForPath(shares, path)
   const [newName, setNewName] = useState(name)
   const children = Object.keys(node.children)
   const pk = pathKeyOf(path)
@@ -118,6 +123,23 @@ function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path:
     if (n && n !== name) onRenameFolder(path, n)
   }
 
+  // The menu closes on a click outside or Esc. Mouse-leave alone isn't
+  // enough: on a touch screen there is no hover, so it would never close.
+  const nodeRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!menu || menu === 'share') return
+    const outside = (e: PointerEvent) => {
+      if (!nodeRef.current?.contains(e.target as Node)) setMenu(null)
+    }
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(null)
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', esc)
+    return () => {
+      document.removeEventListener('pointerdown', outside)
+      document.removeEventListener('keydown', esc)
+    }
+  }, [menu])
+
   // Where this folder may move: not into itself or its own subfolders.
   const targets = folderPaths.filter((p) => {
     const parts = p.split(' / ')
@@ -125,7 +147,7 @@ function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path:
   })
 
   return (
-    <div>
+    <div ref={nodeRef}>
       <div
         className={`tree-row ${isSelected ? 'selected' : ''} ${drop.over ? 'drag-over' : ''}`}
         style={{ paddingLeft: 8 + depth * 14 }}
@@ -163,6 +185,7 @@ function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path:
           >
             {isLocked ? <Lock size={11} className="c-reminder" /> : children.length ? (expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />) : <span style={{ width: 12 }} />}
             <span className="ellipsis">{name}</span>
+            {shared.length > 0 && <Users size={10} className="shared-badge" />}
           </span>
         )}
         {menu !== 'rename' && (
@@ -192,8 +215,16 @@ function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path:
             <Pencil size={12} /> Yeniden adlandır
           </button>
           <button onClick={() => setMenu('move')}><FolderInput size={12} /> Taşı…</button>
+          <button
+            onClick={() => setMenu(isProtected ? null : 'share')}
+            disabled={isProtected}
+            title={isProtected ? 'Şifreli klasörler paylaşılamaz' : shareSummary(shared)}
+          >
+            <Users size={12} /> Paylaş…
+          </button>
         </div>
       )}
+      {menu === 'share' && <ShareModal path={path} shares={shares} onClose={() => setMenu(null)} />}
       {menu === 'move' && (
         <div className="picker-anchor">
           <MoveMenu

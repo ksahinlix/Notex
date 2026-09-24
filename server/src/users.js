@@ -1,5 +1,6 @@
 // Users (D16).
 import crypto from "node:crypto";
+import { linkInvites } from "./shares.js";
 
 export function toApiUser(row) {
   return { id: row.id, email: row.email, name: row.name, picture: row.picture };
@@ -24,6 +25,8 @@ export async function upsertGoogleUser(pool, google, ownerEmail) {
     await pool.query("UPDATE notes SET user_id = $1 WHERE user_id IS NULL", [user.id]);
     await pool.query("UPDATE protected_folders SET user_id = $1 WHERE user_id IS NULL", [user.id]);
   }
+  // Invites sent to this e-mail before the account existed (D18).
+  await linkInvites(pool, user);
   return user;
 }
 
