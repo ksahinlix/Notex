@@ -482,7 +482,7 @@ Browser: Google button → ID token ──POST /api/auth/google──▶ Server:
 | **localStorage** | reader text size, "tour done", theme | small per-browser preferences |
 | **CSS variables + `prefers-color-scheme`** | `index.css`, `lib/theme.ts` | dark mode that follows the device or the user's choice |
 | **URL hash** | `#hatirlatmalar` | the Reminders page survives reload |
-| **Build-time constant** (`define`) | `lib/version.ts` | the version at the foot of the page, compared with the server |
+| **Build-time constant** (`define`) | `lib/version.ts` | the version under the composer, compared with the server |
 
 ---
 

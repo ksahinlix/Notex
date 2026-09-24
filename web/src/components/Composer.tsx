@@ -10,6 +10,7 @@ import { parsePath } from '../lib/tree'
 import { store } from '../state/store'
 import ReminderPicker, { type ReminderChoice } from './ReminderPicker'
 import RichEditor, { type RichEditorHandle } from './RichEditor'
+import VersionTag from './VersionTag'
 
 interface Props {
   selectedPath: string[] | null
@@ -245,6 +246,7 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
         )}
         {error && <div className="error">{error}</div>}
       </div>
+      {!expanded && <VersionTag />}
     </div>
   )
 }

@@ -1153,3 +1153,14 @@ page content, and now reads as a version people can say out loud:
 the browser test's 12 checks — the footer reads `Notex v1.0.0`, its tooltip
 has all three parts, it sits below the content, and it offers the reload when
 the server reports another build.
+
+### 2026-09-24 — The version sits under the note box (v1.0.1)
+**What:** the version line moved from the end of the page content into the
+composer bar, under the note box. The bar is fixed to the bottom of the
+window, so "Notex v1.0.1" is visible from anywhere without scrolling, below
+everything else — which is what was asked for. It is hidden while the
+composer is in full-screen writing mode, where it would be in the way.
+
+**How verified:** the browser test checks it sits below the note box, is on
+screen at a phone size without scrolling, and stays visible after scrolling
+to the top; 14 checks in all. 138 web tests, lint and build pass.

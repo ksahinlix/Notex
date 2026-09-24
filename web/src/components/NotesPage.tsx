@@ -26,7 +26,6 @@ import InviteBanner from './InviteBanner'
 import { ToastHost } from './ToastHost'
 import ThemeToggle from './ThemeToggle'
 import Tour from './Tour'
-import VersionTag from './VersionTag'
 
 const PATH_OPTIONS_ID = 'notex-paths'
 
@@ -324,7 +323,6 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
         </div>
           </>
         )}
-        <VersionTag />
       </main>
 
       <Composer selectedPath={sharedPick ? sharedPick.path : selectedPath} pathOptionsId={PATH_OPTIONS_ID} sharedOwnerId={sharedPick?.ownerId} />
