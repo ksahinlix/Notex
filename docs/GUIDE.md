@@ -482,6 +482,7 @@ Browser: Google button → ID token ──POST /api/auth/google──▶ Server:
 | **localStorage** | reader text size, "tour done", theme | small per-browser preferences |
 | **CSS variables + `prefers-color-scheme`** | `index.css`, `lib/theme.ts` | dark mode that follows the device or the user's choice |
 | **URL hash** | `#hatirlatmalar` | the Reminders page survives reload |
+| **Build-time constant** (`define`) | `lib/version.ts` | the running build is shown in the corner and compared with the server |
 
 ---
 
@@ -811,6 +812,8 @@ stay ordinary notes.
 or the **last day** of shorter months (31 → 30/28; 29 Feb → 28 Feb).
 ✓ on a repeating reminder sets `reminderDoneUntil` = that occurrence, so only
 that one disappears.
+
+The Reminders page can also **edit a reminder** (the pencil opens the ordinary note card in edit mode, so text, images, folder and time all work the same) and **rename or share its folder** from the ⋯ menu in the folder list.
 
 **The Reminders page** (`agenda.ts`): Gecikmiş (overdue, incl. the latest
 missed repeat), the **next 6 months by month** (monthly/yearly: every

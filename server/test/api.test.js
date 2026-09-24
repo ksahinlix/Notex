@@ -59,7 +59,7 @@ after(async () => {
 
 test("health, config and Google login", async () => {
   const api = client();
-  assert.deepEqual((await api("GET", "/api/health")).body, { ok: true, db: "up" });
+  assert.deepEqual((await api("GET", "/api/health")).body, { ok: true, db: "up", version: "dev" }); // "dev" unless Render set a commit
   assert.deepEqual((await api("GET", "/api/auth/config")).body, { googleClientId: "test-client" });
   assert.equal((await api("GET", "/api/notes")).status, 401);
   assert.equal((await api("POST", "/api/auth/google", { credential: "forged" })).status, 401);

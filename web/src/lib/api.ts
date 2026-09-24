@@ -36,7 +36,7 @@ async function request<T>(method: string, path: string, body?: unknown, signal?:
 }
 
 export const api = {
-  health: () => request<{ ok: boolean; db: string }>('GET', '/api/health'),
+  health: () => request<{ ok: boolean; db: string; version?: string }>('GET', '/api/health'),
 
   me: () => request<{ authenticated: boolean; user?: User }>('GET', '/api/auth/me'),
   authConfig: () => request<{ googleClientId: string | null }>('GET', '/api/auth/config'),
