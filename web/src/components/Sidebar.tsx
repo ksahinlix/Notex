@@ -159,6 +159,7 @@ function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path:
             autoFocus
             value={newName}
             aria-label="Klasörün yeni adı"
+            onFocus={(e) => e.target.select()}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') submitRename()

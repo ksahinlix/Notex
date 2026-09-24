@@ -433,7 +433,11 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
   padding: 6px 8px; border-radius: 5px; cursor: pointer; color: var(--text);
 }
 .folder-menu button:hover { background: var(--accent-soft); color: var(--accent); }
-.rename-input { flex: 1; min-width: 0; padding: 3px 6px; font-size: 13px; }
+.rename-input {
+  flex: 1; min-width: 0; padding: 0 2px; font: inherit; font-size: 13px; line-height: 20px; border-radius: 0;
+  border: none; border-bottom: 1.5px solid var(--accent); background: transparent; color: var(--text);
+}
+.rename-input:focus { outline: none; }
 .tree-label[draggable='true'] { cursor: pointer; }
 
 /* ---- guided tour ---- */

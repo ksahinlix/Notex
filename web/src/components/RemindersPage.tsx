@@ -184,12 +184,15 @@ export default function RemindersPage({ notes, contentOf, onOpenReader, pathOpti
             const locked = state.folders.some((f) => f.pathKey === pathKeyOf(c.path) && !!f.pathKey)
             const shared = sharesForPath(state.shares, c.path)
             return (
-              <div key={c.key} className={`tree-row ${category === c.key ? 'selected' : ''}`} style={{ paddingLeft: 12 }} onClick={() => setCategory(c.key)}>
+              <div key={c.key}>
+              <div className={`tree-row ${category === c.key ? 'selected' : ''}`} style={{ paddingLeft: 12 }} onClick={() => setCategory(c.key)}>
                 {renaming?.key === c.key ? (
                   <input
                     className="rename-input"
                     autoFocus
+                    aria-label="Klasörün yeni adı"
                     value={renaming.name}
+                    onFocus={(e) => e.target.select()}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => setRenaming({ key: c.key, name: e.target.value })}
                     onKeyDown={(e) => {
@@ -218,6 +221,7 @@ export default function RemindersPage({ notes, contentOf, onOpenReader, pathOpti
                   </button>
                 )}
                 <span className="count">{c.count}</span>
+              </div>
                 {folderMenu === c.key && (
                   <div className="folder-menu card" onClick={(e) => e.stopPropagation()}>
                     <button
