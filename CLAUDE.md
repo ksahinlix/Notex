@@ -60,4 +60,7 @@ New decisions go in the Decisions table and get their own section. Update
   folders (see D8).
 - Notes are only created or replaced via `PUT /api/notes/:id` with a
   client-generated id and `updatedAt` (see D9).
+- Bump `web/package.json`'s version with every deploy (patch for fixes, minor
+  for features). It is shown at the foot of the page as `Notex v1.0.0`; the
+  commit is baked in beside it, so builds stay identifiable either way.
 - Never commit `.env` files or secrets.

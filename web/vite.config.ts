@@ -1,12 +1,16 @@
 /// <reference types="vitest/config" />
 import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-// Which build is running, shown in the app and compared with the server's
-// version so an open tab can tell you a new one was deployed. Render sets
-// RENDER_GIT_COMMIT; locally we ask git, and fall back to "dev".
+// Which build is running. The number people read is package.json's version
+// ("v1.0.3"); bump it with every deploy. The commit is kept alongside it, so
+// a build can still be identified exactly, and it is what the running page
+// compares with the server to notice a deploy. Render sets RENDER_GIT_COMMIT;
+// locally we ask git, and fall back to "dev".
 function version() {
+  const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
   const sha = process.env.RENDER_GIT_COMMIT ?? (() => {
     try {
       return execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim()
@@ -14,7 +18,7 @@ function version() {
       return ''
     }
   })()
-  return { commit: sha.slice(0, 7) || 'dev', builtAt: new Date().toISOString() }
+  return { name: `v${version}`, commit: sha.slice(0, 7) || 'dev', builtAt: new Date().toISOString() }
 }
 
 // https://vite.dev/config/

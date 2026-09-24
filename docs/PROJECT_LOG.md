@@ -1133,3 +1133,23 @@ renaming moving both reminders, the reload offer when the server reports a
 different build, and no sideways scroll on a phone.
 
 **Next:** deploy.
+
+### 2026-09-24 — A version number at the foot of the page
+**What:** the build marker moved from the sidebar corner to a footer under the
+page content, and now reads as a version people can say out loud:
+**"Notex v1.0.0"**.
+
+- The number comes from `web/package.json`, bumped with every deploy (patch
+  for fixes, minor for features). CLAUDE.md now carries that rule.
+- The commit and build time moved into the footer's tooltip
+  ("v1.0.0 · 780f12e · 24 Eyl 17:02"), so a build is still identifiable
+  exactly.
+- The "a deploy happened while your tab was open" check still compares
+  **commits**, not the version number: a forgotten bump can then never hide a
+  new deploy. The footer turns into "yeni sürüm var, yenile" next to the
+  usual toast.
+
+**How verified:** 138 web tests (4 for the version rules), lint, build, and
+the browser test's 12 checks — the footer reads `Notex v1.0.0`, its tooltip
+has all three parts, it sits below the content, and it offers the reload when
+the server reports another build.

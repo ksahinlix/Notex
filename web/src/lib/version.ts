@@ -1,17 +1,26 @@
-// Which build of the app is running (set in vite.config.ts at build time) and
-// whether the server has since deployed a newer one.
+// Which build of the app is running (baked in by vite.config.ts) and whether
+// the server has since deployed a newer one.
+//
+// `name` is the number to read, from web/package.json: major.minor.patch,
+// bumped with every deploy. `commit` identifies the build exactly and is what
+// the comparison uses, so a forgotten bump can never hide a new deploy.
 
-declare const __APP_VERSION__: { commit: string; builtAt: string }
+declare const __APP_VERSION__: { name: string; commit: string; builtAt: string }
 
-export const VERSION: { commit: string; builtAt: string } =
-  typeof __APP_VERSION__ === 'undefined' ? { commit: 'dev', builtAt: '' } : __APP_VERSION__
+export interface BuildInfo {
+  name: string
+  commit: string
+  builtAt: string
+}
 
-/** "a1b2c3d · 24 Eyl 15:40" — short, for the corner of the page. */
-export function versionLabel(v = VERSION): string {
-  if (!v.builtAt) return v.commit
-  const d = new Date(v.builtAt)
-  if (Number.isNaN(d.getTime())) return v.commit
-  return `${v.commit} · ${d.toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+export const VERSION: BuildInfo =
+  typeof __APP_VERSION__ === 'undefined' ? { name: 'v0.0.0', commit: 'dev', builtAt: '' } : __APP_VERSION__
+
+/** "v1.0.3 · a1b2c3d · 24 Eyl 15:40", for the tooltip. */
+export function versionDetail(v: BuildInfo = VERSION): string {
+  const when = v.builtAt ? new Date(v.builtAt) : null
+  const time = when && !Number.isNaN(when.getTime()) ? when.toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''
+  return [v.name, v.commit, time].filter(Boolean).join(' · ')
 }
 
 /**
@@ -19,7 +28,7 @@ export function versionLabel(v = VERSION): string {
  * was deployed while the tab was open. Unknown versions ("dev", empty) never
  * count, so local development doesn't nag.
  */
-export function isOutdated(serverCommit: string | undefined, v = VERSION): boolean {
+export function isOutdated(serverCommit: string | undefined, v: BuildInfo = VERSION): boolean {
   if (!serverCommit || serverCommit === 'dev' || v.commit === 'dev') return false
   return serverCommit !== v.commit
 }
