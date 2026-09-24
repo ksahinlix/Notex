@@ -474,3 +474,9 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .c-ok { color: var(--ok); }
 .small { font-size: 12px; }
 @media (max-width: 680px) { .invite-banner { flex-wrap: wrap; } }
+
+/* Which build is running (see lib/version.ts). */
+.version-tag { margin: 8px 4px 0; font-size: 11px; color: var(--text-muted); text-align: right; }
+.version-tag .link { font-size: 11px; color: var(--reminder); }
+.agenda-edit { margin-bottom: 8px; }
+.agenda-edit .note { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }

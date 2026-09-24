@@ -1099,3 +1099,37 @@ Hatırlatmalar page, and the invitee then sees the reminder on her own
 Hatırlatmalar page under his name. 134 web tests, lint and build pass.
 
 **Next:** deploy.
+
+### 2026-09-24 — Editing and renaming on the Reminders page; a visible version
+**What:**
+- **Edit a reminder** from the Hatırlatmalar page: the ✏️ button opens the
+  ordinary note card in place (`NoteCard` gained `startEditing`/`onEditDone`),
+  so text, images, folder and the reminder time are edited with the same
+  editor as everywhere else, instead of a second one to keep in step.
+- **Rename (and share) the folder** from the reminders folder list, through a
+  ⋯ menu like the notes sidebar. Renaming reuses `store.moveFolder`, so it
+  moves everything in the folder and can be undone from the toast.
+- **Which build is running** is shown in the corner of both pages
+  (`lib/version.ts`, `VersionTag.tsx`). Vite bakes in the commit at build
+  time (`RENDER_GIT_COMMIT` on Render, `git rev-parse` locally) and
+  `/api/health` reports the server's. When they differ — a deploy happened
+  while the tab was open — the page offers "Yeni sürüm yayında · Yenile".
+  Checked on load and whenever the tab regains focus; unknown versions
+  ("dev") never nag.
+
+**Two bugs the browser test caught, both real:**
+- A card opened straight in edit mode never filled its draft fields, so
+  saving silently did nothing — and, had it saved, it would have dropped the
+  note's folder and its reminder time. The drafts now come from the note
+  (`draftOf`).
+- `reminderLabel` kept the text the reminder had when it was created, so
+  editing a reminder never changed what the Hatırlatmalar page and the
+  "Yaklaşan" strip showed. It now follows the text.
+
+**How verified:** 137 web tests (3 new for version comparison), 33 server
+tests, lint, build. Browser test with 10 checks: the version tag, the pencil
+opening the editor, the edit reaching the server with its time intact,
+renaming moving both reminders, the reload offer when the server reports a
+different build, and no sideways scroll on a phone.
+
+**Next:** deploy.

@@ -26,6 +26,7 @@ import InviteBanner from './InviteBanner'
 import { ToastHost } from './ToastHost'
 import ThemeToggle from './ThemeToggle'
 import Tour from './Tour'
+import VersionTag from './VersionTag'
 
 const PATH_OPTIONS_ID = 'notex-paths'
 
@@ -230,7 +231,14 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
         )}
 
         {view === 'reminders' ? (
-          <RemindersPage notes={state.notes} contentOf={contentOf} onOpenReader={openReader} />
+          <RemindersPage
+            notes={state.notes}
+            contentOf={contentOf}
+            onOpenReader={openReader}
+            pathOptionsId={PATH_OPTIONS_ID}
+            folderPaths={paths}
+            onRenameFolder={(folder, name) => void relocateFolder(folder, folderRenamed(folder, name))}
+          />
         ) : (
           <>
         <InviteBanner invites={state.sharedWithMe} />
@@ -272,6 +280,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
               }}
             />
             {treeError && <div className="error" style={{ marginTop: 6 }}>{treeError}</div>}
+            <VersionTag />
           </div>
 
           <section className="notes">

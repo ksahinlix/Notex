@@ -31,14 +31,28 @@ interface Props {
   tourTarget?: boolean
   onSelectPath: (path: string[]) => void
   onImageClick: (src: string) => void
+  /** Open straight in edit mode (the Reminders page edits through this card). */
+  startEditing?: boolean
+  /** Editing finished, saved or not. */
+  onEditDone?: () => void
   onUnlock: () => void
 }
 
 
-export default function NoteCard({ note, content, pathOptionsId, folderPaths, terms, meaningMatch, onOpenReader, onMove, tourTarget, onSelectPath, onImageClick, onUnlock }: Props) {
-  const [editing, setEditing] = useState(false)
-  const [draftPath, setDraftPath] = useState('')
-  const [draftReminder, setDraftReminder] = useState<ReminderChoice | null>(null)
+/** What the edit fields start from: the note's own folder and reminder. */
+const draftOf = (n: Note) => ({
+  path: n.path.join(' / '),
+  reminder: n.isReminder || n.reminderAt ? { at: n.reminderAt ? new Date(n.reminderAt) : null, repeat: n.repeat ?? null } : null,
+})
+
+export default function NoteCard({ note, content, pathOptionsId, folderPaths, terms, meaningMatch, onOpenReader, onMove, tourTarget, onSelectPath, onImageClick, onUnlock, startEditing, onEditDone }: Props) {
+  // startEditing: the card opens straight in edit mode. The Reminders page
+  // uses it, so editing a reminder is the same editor as everywhere else.
+  const [editing, setEditing] = useState(!!startEditing)
+  // Opening straight in edit mode must fill these too, or saving would drop
+  // the folder and the reminder.
+  const [draftPath, setDraftPath] = useState(() => (startEditing ? draftOf(note).path : ''))
+  const [draftReminder, setDraftReminder] = useState<ReminderChoice | null>(() => (startEditing ? draftOf(note).reminder : null))
   const [pickerOpen, setPickerOpen] = useState(false)
   const [imagesLoading, setImagesLoading] = useState(false)
   const editorRef = useRef<RichEditorHandle>(null)
@@ -60,12 +74,16 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
   const c = content
 
   function startEdit() {
-    setDraftPath(note.path.join(' / '))
-    setDraftReminder(
-      note.isReminder || note.reminderAt ? { at: note.reminderAt ? new Date(note.reminderAt) : null, repeat: note.repeat ?? null } : null,
-    )
+    const d = draftOf(note)
+    setDraftPath(d.path)
+    setDraftReminder(d.reminder)
     setPickerOpen(false)
     setEditing(true)
+  }
+
+  function stopEdit() {
+    setEditing(false)
+    onEditDone?.()
   }
 
   async function saveEdit() {
@@ -78,11 +96,13 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
       text,
       blocks,
       listItemText: note.isListItem ? text : c.listItemText,
-      reminderLabel: draftReminder ? c.reminderLabel || text.split('\n')[0].slice(0, 80) : null,
+      // Follows the text: editing a reminder must change what the reminders
+      // page and the "Yaklaşan" strip show, not keep the first version of it.
+      reminderLabel: draftReminder ? text.split('\n')[0].slice(0, 80) : null,
       // "düzenlendi" only when the text actually changed (moving a note doesn't count)
       editedAt: text !== c.text || JSON.stringify(blocks) !== JSON.stringify(c.blocks ?? null) ? nowIso() : c.editedAt,
     }
-    setEditing(false)
+    stopEdit()
     await store.update(
       {
         ...note,
@@ -211,7 +231,7 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
               )}
               <div className="edit-row">
                 <button className="btn btn-primary" onClick={saveEdit} disabled={imagesLoading}>Kaydet</button>
-                <button className="btn btn-ghost" onClick={() => setEditing(false)}>Vazgeç</button>
+                <button className="btn btn-ghost" onClick={stopEdit}>Vazgeç</button>
               </div>
             </div>
           ) : (

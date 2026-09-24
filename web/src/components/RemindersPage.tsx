@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlarmClock, BookOpen, Check, ChevronDown, ChevronRight, Repeat as RepeatIcon, Trash2, Users } from 'lucide-react'
+import { AlarmClock, BookOpen, Check, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Repeat as RepeatIcon, Trash2, Users } from 'lucide-react'
 import { buildAgenda, isReminderNote, type AgendaItem } from '../lib/agenda'
 import { repeatLabel } from '../lib/recurrence'
 import { pathKeyOf } from '../lib/tree'
@@ -9,18 +9,25 @@ import { confirmDialog } from '../state/confirm'
 import { store, useNotex } from '../state/store'
 import ReminderPicker from './ReminderPicker'
 import ShareModal from './ShareModal'
+import NoteCard from './NoteCard'
+import VersionTag from './VersionTag'
 
 interface Props {
   notes: Note[]
   contentOf: (n: Note) => NoteContent | undefined
   onOpenReader: (id: string, list: string[]) => void
+  /** For the editor inside a reminder: the folder list and its datalist. */
+  pathOptionsId: string
+  folderPaths: string[]
+  /** Renames a folder with everything in it (same as the notes sidebar). */
+  onRenameFolder: (folder: string[], name: string) => void
 }
 
 // The Reminders page (separate from the notes tree): categories on the left,
 // and an agenda on the right — overdue, the next 6 months by month, undated,
 // completed. ✓ completes (a repeating reminder skips this occurrence),
 // ⏰ changes the time or repeat.
-export default function RemindersPage({ notes, contentOf, onOpenReader }: Props) {
+export default function RemindersPage({ notes, contentOf, onOpenReader, pathOptionsId, folderPaths, onRenameFolder }: Props) {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000)
@@ -30,6 +37,9 @@ export default function RemindersPage({ notes, contentOf, onOpenReader }: Props)
   const [showDone, setShowDone] = useState(false)
   const [editing, setEditing] = useState<string | null>(null) // key of the item whose picker is open
   const [sharing, setSharing] = useState<string[] | null>(null) // path whose Paylaş dialog is open
+  const [editingNote, setEditingNote] = useState<string | null>(null) // note being edited in place
+  const [folderMenu, setFolderMenu] = useState<string | null>(null) // category key whose ⋯ menu is open
+  const [renaming, setRenaming] = useState<{ key: string; name: string } | null>(null)
   const state = useNotex()
 
   const reminders = useMemo(() => notes.filter(isReminderNote), [notes])
@@ -57,6 +67,13 @@ export default function RemindersPage({ notes, contentOf, onOpenReader }: Props)
   const allIds = [...agenda.overdue, ...agenda.months.flatMap((m) => m.items), ...agenda.undated].map((i) => i.note.id)
   const readerList = [...new Set(allIds)]
 
+  /** Applies a folder rename typed in the list (empty or unchanged = nothing). */
+  function commitRename(path: string[]) {
+    const name = renaming?.name.trim()
+    setRenaming(null)
+    if (name && name !== path[path.length - 1]) onRenameFolder(path, name)
+  }
+
   async function remove(note: Note) {
     const c = contentOf(note)
     const ok = await confirmDialog({
@@ -72,6 +89,26 @@ export default function RemindersPage({ notes, contentOf, onOpenReader }: Props)
     const { note, at } = item
     const c = contentOf(note)
     const key = `${note.id}@${at?.getTime() ?? 'none'}`
+    // Editing reuses the note card, so a reminder is edited with the same
+    // editor (text, images, folder, time) as anywhere else.
+    if (editingNote === note.id)
+      return (
+        <div key={key} className="agenda-edit">
+          <NoteCard
+            note={note}
+            content={c}
+            pathOptionsId={pathOptionsId}
+            folderPaths={folderPaths}
+            startEditing
+            onEditDone={() => setEditingNote(null)}
+            onOpenReader={() => onOpenReader(note.id, [note.id])}
+            onMove={() => {}}
+            onSelectPath={() => {}}
+            onImageClick={() => {}}
+            onUnlock={() => {}}
+          />
+        </div>
+      )
     return (
       <div key={key} className={`agenda-item ${overdue ? 'overdue-item' : ''} ${note.checked ? 'done-item' : ''}`}>
         <div className="agenda-date">
@@ -126,6 +163,7 @@ export default function RemindersPage({ notes, contentOf, onOpenReader }: Props)
             </button>
           )}
           <button className="icon-btn" title="Zamanı değiştir" onClick={() => setEditing(editing === key ? null : key)}><AlarmClock size={14} /></button>
+          <button className="icon-btn" title="Düzenle" onClick={() => setEditingNote(note.id)} disabled={!c}><Pencil size={14} /></button>
           <button className="icon-btn" title="Oku" onClick={() => onOpenReader(note.id, readerList.includes(note.id) ? readerList : [note.id])}><BookOpen size={14} /></button>
           <button className="icon-btn danger" title="Sil" onClick={() => void remove(note)}><Trash2 size={14} /></button>
         </div>
@@ -135,7 +173,7 @@ export default function RemindersPage({ notes, contentOf, onOpenReader }: Props)
 
   const empty = !agenda.overdue.length && !agenda.months.length && !agenda.undated.length
   return (
-    <div className="layout">
+    <div className="layout" onClick={() => folderMenu && setFolderMenu(null)}>
       <div className="sidebar-wrap">
         <nav className="sidebar card">
           <div className={`tree-row tree-all ${!category ? 'selected' : ''}`} onClick={() => setCategory(null)}>
@@ -148,30 +186,68 @@ export default function RemindersPage({ notes, contentOf, onOpenReader }: Props)
             const shared = sharesForPath(state.shares, c.path)
             return (
               <div key={c.key} className={`tree-row ${category === c.key ? 'selected' : ''}`} style={{ paddingLeft: 12 }} onClick={() => setCategory(c.key)}>
-                <span className="tree-label">
-                  <span className="ellipsis">{c.label}</span>
-                  {shared.length > 0 && <Users size={10} className="shared-badge" />}
-                </span>
-                {c.mine && !locked && (
+                {renaming?.key === c.key ? (
+                  <input
+                    className="rename-input"
+                    autoFocus
+                    value={renaming.name}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setRenaming({ key: c.key, name: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitRename(c.path)
+                      if (e.key === 'Escape') setRenaming(null)
+                    }}
+                    onBlur={() => commitRename(c.path)}
+                  />
+                ) : (
+                  <span className="tree-label">
+                    <span className="ellipsis">{c.label}</span>
+                    {shared.length > 0 && <Users size={10} className="shared-badge" />}
+                  </span>
+                )}
+                {c.mine && (
                   <button
                     className="icon-btn hover-only"
-                    title="Bu klasörü paylaş"
-                    aria-label="Bu klasörü paylaş"
+                    title="Klasör işlemleri"
+                    aria-label="Klasör işlemleri"
                     onClick={(e) => {
                       e.stopPropagation()
-                      setSharing(c.path)
+                      setFolderMenu(folderMenu === c.key ? null : c.key)
                     }}
                   >
-                    <Users size={12} />
+                    <MoreHorizontal size={13} />
                   </button>
                 )}
                 <span className="count">{c.count}</span>
+                {folderMenu === c.key && (
+                  <div className="folder-menu card" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => {
+                        setRenaming({ key: c.key, name: c.path[c.path.length - 1] })
+                        setFolderMenu(null)
+                      }}
+                    >
+                      <Pencil size={12} /> Yeniden adlandır
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSharing(c.path)
+                        setFolderMenu(null)
+                      }}
+                      disabled={locked}
+                      title={locked ? 'Şifreli klasörler paylaşılamaz' : ''}
+                    >
+                      <Users size={12} /> Paylaş…
+                    </button>
+                  </div>
+                )}
               </div>
             )
           })}
           {sharing && <ShareModal path={sharing} shares={state.shares} onClose={() => setSharing(null)} />}
           {!categories.length && <div className="muted" style={{ padding: '6px 8px' }}>Henüz hatırlatma yok</div>}
         </nav>
+        <VersionTag />
       </div>
 
       <section className="notes agenda">

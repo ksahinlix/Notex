@@ -14,6 +14,10 @@ import { notesRouter } from "./routes/notes.js";
 import { protectedFoldersRouter } from "./routes/protectedFolders.js";
 import { sharesRouter } from "./routes/shares.js";
 
+// Which build is running. Render sets RENDER_GIT_COMMIT on every deploy; the
+// browser compares it with its own build and offers to reload when they differ.
+const VERSION = (process.env.RENDER_GIT_COMMIT ?? "").slice(0, 7) || "dev";
+
 // Builds the Express app. Kept separate from index.js so tests can create it
 // with their own database and secrets.
 export function createApp({
@@ -31,7 +35,7 @@ export function createApp({
   app.get("/api/health", async (_req, res) => {
     try {
       await pool.query("SELECT 1");
-      res.json({ ok: true, db: "up" });
+      res.json({ ok: true, db: "up", version: VERSION });
     } catch {
       res.status(503).json({ ok: false, db: "down" });
     }
