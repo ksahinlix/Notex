@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
-import { isOutdated, VERSION, versionLabel } from '../lib/version'
+import { isOutdated, VERSION, versionDetail } from '../lib/version'
 import { showToast } from '../state/toast'
 
 /**
- * Which build this page is running, in the corner. It also asks the server
- * on load and whenever the tab regains focus: if a deploy happened while the
- * tab was open, the page offers to reload (an old tab keeps talking to the
- * new server otherwise).
+ * The version at the foot of the page. It also asks the server on load and
+ * whenever the tab regains focus: if a deploy happened while the tab was
+ * open, it offers to reload, because an old page keeps talking to the new
+ * server otherwise.
  */
 export default function VersionTag() {
   const [stale, setStale] = useState(false)
@@ -33,12 +33,14 @@ export default function VersionTag() {
   }, [])
 
   return (
-    <div className="version-tag" title={`Bu sayfa ${VERSION.commit} sürümünü çalıştırıyor`}>
-      {stale ? (
-        <button className="link" onClick={() => location.reload()}>Yeni sürüm var — yenile</button>
-      ) : (
-        <span>sürüm {versionLabel()}</span>
+    <footer className="version-tag" title={versionDetail()}>
+      Notex {VERSION.name}
+      {stale && (
+        <>
+          {' · '}
+          <button className="link" onClick={() => location.reload()}>yeni sürüm var, yenile</button>
+        </>
       )}
-    </div>
+    </footer>
   )
 }

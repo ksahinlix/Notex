@@ -280,7 +280,6 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
               }}
             />
             {treeError && <div className="error" style={{ marginTop: 6 }}>{treeError}</div>}
-            <VersionTag />
           </div>
 
           <section className="notes">
@@ -325,6 +324,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
         </div>
           </>
         )}
+        <VersionTag />
       </main>
 
       <Composer selectedPath={sharedPick ? sharedPick.path : selectedPath} pathOptionsId={PATH_OPTIONS_ID} sharedOwnerId={sharedPick?.ownerId} />

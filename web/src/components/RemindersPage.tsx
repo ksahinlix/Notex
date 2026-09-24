@@ -10,7 +10,6 @@ import { store, useNotex } from '../state/store'
 import ReminderPicker from './ReminderPicker'
 import ShareModal from './ShareModal'
 import NoteCard from './NoteCard'
-import VersionTag from './VersionTag'
 
 interface Props {
   notes: Note[]
@@ -247,7 +246,6 @@ export default function RemindersPage({ notes, contentOf, onOpenReader, pathOpti
           {sharing && <ShareModal path={sharing} shares={state.shares} onClose={() => setSharing(null)} />}
           {!categories.length && <div className="muted" style={{ padding: '6px 8px' }}>Henüz hatırlatma yok</div>}
         </nav>
-        <VersionTag />
       </div>
 
       <section className="notes agenda">
