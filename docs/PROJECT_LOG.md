@@ -949,3 +949,41 @@ README and CLAUDE.md link to it; CLAUDE.md asks to keep it updated.
 
 **Next:** merge together with the learning guide (PR #10) after the owner
 tries it.
+
+### 2026-09-24 — Undated reminders were invisible; dates without a month name
+**Reported:** an undated reminder could not be seen on the notes page, only
+under Hatırlatmalar; and "ayın 26'sında sinemaya gideceğiz" did not become a
+reminder.
+
+**What was wrong:**
+- Reminder notes are kept out of the note list (2026-09-24 decision), and the
+  "Yaklaşan" strip only listed overdue items and the next 2 days — and only
+  *dated* ones. An undated reminder was therefore on no screen except the
+  Reminders tab, and with only undated reminders the strip didn't render at
+  all, so even its "Tümü" link was missing. A note the user had just written
+  looked lost.
+- The parser had no rule for a day of the month without a month name.
+  ("salı günü pazara gideceğim" did work; it was 5 days away, so the strip's
+  2-day window hid it, which looked like the same bug.)
+
+**What we did:**
+- `stripItems` (`lib/agenda.ts`, pure and unit-tested) now decides what the
+  strip shows: all overdue, **all undated** (labelled "Tarihsiz"), and the
+  next 7 days. If the week is empty the next reminder is shown anyway, so
+  the strip never vanishes while reminders exist. It shows 4 rows, then
+  "+n daha".
+- `parseReminder` understands "ayın 26'sında", "bu ayın 25'inde 14:30",
+  "gelecek ayın 3'ünde", "ayın 28 günü" and a bare "26'sında": this month, or
+  the next month that has that day ("31'inde" skips September). To avoid
+  false positives a suffix is required, so "bu ay 3 kitap okudum",
+  "sayfa 26'da" and "sepetteki 3'ü" are still plain notes.
+
+**How verified:**
+- Web: 126 tests (new: 8 day-of-month cases, 3 non-dates, 4 strip cases).
+- Browser test, 12 checks: undated, overdue and a reminder 5 days away are in
+  the strip; one 40 days away is not; ✓ completes the undated one and it
+  leaves the strip; with only far reminders one row still shows; with no
+  reminders there is no strip; "ayın N'sında …" is recognised while typing;
+  no sideways scroll on a phone.
+
+**Next:** deploy after the owner tries it.

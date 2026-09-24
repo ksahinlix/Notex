@@ -91,6 +91,23 @@ function futureDate(now: Date, day: number, month: number, year?: number) {
   return d
 }
 
+/**
+ * A day of the month written without a month name ("ayın 26'sında"): this
+ * month if that day is still ahead, otherwise the next month that has it
+ * (so "31'inde" skips the short months).
+ */
+function monthDay(now: Date, day: number, nextMonth: boolean): Date | null {
+  const today = atTime(now, 0, 0)
+  for (let i = nextMonth ? 1 : 0; i < 14; i++) {
+    const y = now.getFullYear() + Math.floor((now.getMonth() + i) / 12)
+    const m = (now.getMonth() + i) % 12
+    if (day > new Date(y, m + 1, 0).getDate()) continue
+    const d = new Date(y, m, day)
+    if (d >= today) return d
+  }
+  return null
+}
+
 /** Returns the reminder in the text, or null if it has no date/time. */
 // Words that ask for a reminder even without a date: hatırlat(ma), anımsat,
 // unutma(yayım), remind(er).
@@ -162,6 +179,13 @@ function parseRepeat(text: string, now: Date): ParsedReminder | null {
   return { date, repeat: 'daily', matched: joinHits(text, hits) }
 }
 
+// "(bu|gelecek|önümüzdeki) ayın 26'sında", "ayın 3 günü". A suffix is
+// required, so "bu ay 3 kitap okudum" is not a date.
+const MONTH_DAY_NAMED = re(`${B}(?:(bu|gelecek|önümüzdeki|şu)\\s+)?ay(?:ın)?\\s+(3[01]|[0-2]?\\d)(?!\\d)(?:'\\p{L}+|\\.|\\s+günü\\p{L}*)`)
+// The same with "ayın" left out: "26'sında", "3'ünde". The possessive + "de"
+// ("its 26th") is what marks a date; "saat 3'te" and "sayfa 26'da" don't match.
+const MONTH_DAY_ALONE = re(`${B}(3[01]|[0-2]?\\d)(?!\\d)'s?[ıiuü]n[dt][ae]${E}`)
+
 function parseDate(text: string, now: Date): { date: Date; matched: string } | null {
   const s = text.toLocaleLowerCase('tr')
   const hits: Hit[] = []
@@ -209,6 +233,19 @@ function parseDate(text: string, now: Date): { date: Date; matched: string } | n
     if (nd && !(t && t.hit.index === nd.index)) {
       hits.push(nd)
       day = futureDate(now, Number(nd[1]), Number(nd[2]) - 1, nd[3] ? Number(nd[3]) : undefined)
+    } else {
+      // A day without a month name: "ayın 26'sında", "gelecek ayın 3'ünde",
+      // or the month left out entirely, "26'sında sinemaya gideceğiz".
+      const am = find(MONTH_DAY_NAMED, s)
+      const bare = am ? null : find(MONTH_DAY_ALONE, s)
+      const dm = am ?? bare
+      if (dm) {
+        const d = monthDay(now, Number(am ? am[2] : dm[1]), am ? am[1] === 'gelecek' || am[1] === 'önümüzdeki' : false)
+        if (d) {
+          hits.push(dm)
+          day = d
+        }
+      }
     }
   }
   if (t) hits.push(t.hit)

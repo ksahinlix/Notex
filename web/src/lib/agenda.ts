@@ -30,6 +30,21 @@ export interface Agenda {
 
 export const isReminderNote = (n: Note) => !!(n.isReminder || n.reminderAt)
 
+/**
+ * What the notes page's "Yaklaşan" strip shows: everything overdue, every
+ * undated reminder, and the reminders of the next `days` days. Undated ones
+ * are always there because no date will ever bring them back on its own, and
+ * reminder notes are not in the note list. If nothing falls inside the
+ * window, the next reminder is shown anyway, so the strip is never empty
+ * while reminders exist.
+ */
+export function stripItems(agenda: Agenda, now: Date, days = 7): AgendaItem[] {
+  const until = now.getTime() + days * 86400_000
+  const upcoming = agenda.months.flatMap((m) => m.items)
+  const near = upcoming.filter((i) => i.at!.getTime() <= until)
+  return [...agenda.overdue, ...agenda.undated, ...(near.length ? near : upcoming.slice(0, 1))]
+}
+
 const addMonths = (d: Date, m: number) => new Date(d.getFullYear(), d.getMonth() + m, d.getDate(), d.getHours(), d.getMinutes())
 
 export function buildAgenda(notes: Note[], now: Date, monthsAhead = 6): Agenda {

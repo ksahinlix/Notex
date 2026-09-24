@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildAgenda, isReminderNote } from './agenda'
+import { buildAgenda, isReminderNote, stripItems } from './agenda'
 import type { Note } from './types'
 
 const NOW = new Date(2026, 8, 23, 14, 0) // Wed 23 Sep 2026
@@ -54,6 +54,36 @@ describe('agenda', () => {
     const a = buildAgenda([pill, standup], NOW)
     const items = a.months.flatMap((m) => m.items.map((i) => `${i.note.repeat} ${i.at!.getDate()}.${i.at!.getMonth() + 1}`))
     expect(items).toEqual(['daily 24.9', 'weekly 28.9', 'weekly 5.10', 'weekly 12.10', 'weekly 19.10'])
+  })
+
+  // The notes page's strip: reminder notes are not in the note list, so
+  // anything without a date must stay visible here.
+  describe('the notes page strip', () => {
+    const shown = (notes: Note[]) => stripItems(buildAgenda(notes, NOW), NOW).map((i) => (i.at ? `${i.at.getDate()}.${i.at.getMonth() + 1}` : 'undated'))
+
+    it('shows overdue, undated and the coming week', () => {
+      const notes = [
+        note({ reminderAt: iso(2026, 9, 20), isReminder: true }), // overdue
+        note({ isReminder: true }), // undated
+        note({ reminderAt: iso(2026, 9, 25), isReminder: true }), // in 2 days
+        note({ reminderAt: iso(2026, 9, 29), isReminder: true }), // in 6 days
+        note({ reminderAt: iso(2026, 10, 20), isReminder: true }), // a month away
+      ]
+      expect(shown(notes)).toEqual(['20.9', 'undated', '25.9', '29.9'])
+    })
+
+    it('keeps an undated reminder even when it is the only one', () => {
+      expect(shown([note({ isReminder: true })])).toEqual(['undated'])
+    })
+
+    it('falls back to the next reminder when the week is empty', () => {
+      const far = [note({ reminderAt: iso(2026, 11, 5), isReminder: true }), note({ reminderAt: iso(2026, 12, 1), isReminder: true })]
+      expect(shown(far)).toEqual(['5.11'])
+    })
+
+    it('shows nothing without reminders', () => {
+      expect(shown([note({})])).toEqual([])
+    })
   })
 
   it('knows reminder notes', () => {
