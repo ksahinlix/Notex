@@ -1164,3 +1164,23 @@ composer is in full-screen writing mode, where it would be in the way.
 **How verified:** the browser test checks it sits below the note box, is on
 screen at a phone size without scrolling, and stays visible after scrolling
 to the top; 14 checks in all. 138 web tests, lint and build pass.
+
+### 2026-09-24 — Tidying the folder menu and rename on the Reminders page (v1.0.2)
+**Reported:** the rename area on the reminders folder list "doesn't look
+good". Two real faults behind it:
+
+- The ⋯ menu was nested **inside** the row, which is a flex container, so it
+  became a flex item: squeezed to a narrow column on top of the folder name
+  ("Yeniden adlandır" wrapped onto two lines, and you could no longer see
+  which folder you were renaming). It is now a sibling that flows under the
+  row, exactly like the notes sidebar.
+- The rename field looked like a form control dropped into the list: a
+  bordered box taller than the row. It is now an in-place label edit — the
+  row keeps its height, the text sits where the name was, with a thin accent
+  underline — and the old name starts **selected**, so typing replaces it
+  instead of having to clear it first. Both pages share it.
+
+**How verified:** the browser test now measures this instead of trusting the
+eye — the menu opens below the row, its items fit on one line, the rename box
+doesn't change the row's height, and the name is preselected. 18 checks in
+all; 138 web tests, lint and build pass.
