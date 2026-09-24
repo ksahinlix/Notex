@@ -899,6 +899,12 @@ Because you and a friend may both have an "Alışveriş", the request says whose
 folder is meant (`ownerId`), and shared folders are listed apart under
 **"Paylaşılan"** with the owner's name instead of being merged into your tree.
 
+**Sharing a folder of reminders:** reminders are not in the notes tree, so a
+folder holding only reminders has no row in the Notlar sidebar. The folder
+list on the **Hatırlatmalar** page therefore has its own share button. That
+list also keeps a folder someone shared with you apart from your own folder of
+the same name, naming it after its owner ("kaan · Ödemeler").
+
 Three limits worth knowing: a **locked folder cannot be shared** (its key
 never leaves the browser, so the other person would see only ciphertext), a
 note **cannot change owner** (write it in the shared folder rather than moving
