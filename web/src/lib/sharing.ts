@@ -22,7 +22,7 @@ export interface SharedFolder {
 export const accepted = (shares: Share[]) => shares.filter((s) => s.status === 'accepted')
 export const pending = (shares: Share[]) => shares.filter((s) => s.status === 'pending')
 
-const personName = (p: { name: string | null; email: string } | undefined) => p?.name || p?.email?.split('@')[0] || 'Biri'
+export const personName = (p: { name: string | null; email: string } | undefined) => p?.name || p?.email?.split('@')[0] || 'Biri'
 
 /** Your own notes: the ones nobody shared with you. */
 export function ownNotes(notes: Note[], userId: string | null): Note[] {
@@ -82,4 +82,16 @@ export function shareSummary(shares: Share[]): string {
   const names = shares.map((s) => personName(s.person ?? { name: null, email: s.invitedEmail }))
   const waiting = shares.filter((s) => s.status === 'pending').length
   return `${names.join(', ')} ile paylaşıldı${waiting ? ` (${waiting} bekliyor)` : ''}`
+}
+
+/**
+ * Why a note carries the shared mark, as the tooltip text — who it is shared
+ * with, or whose folder it came from. null when it is nobody's business but
+ * yours.
+ */
+export function shareMark(note: Note, mine: Share[], withMe: Share[], userId: string | null): string | null {
+  const from = shareOf(note, withMe, userId)
+  if (from) return `${personName(from.owner)} ile paylaşılan klasörde`
+  const here = sharesForPath(mine, note.path)
+  return here.length ? shareSummary(here) : null
 }

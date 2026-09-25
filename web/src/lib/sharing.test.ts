@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { inviteTokenFrom, isSharedPath, ownNotes, shareOf, sharedFolders, shareSummary, sharesForPath } from './sharing'
+import { inviteTokenFrom, isSharedPath, ownNotes, shareMark, shareOf, sharedFolders, shareSummary, sharesForPath } from './sharing'
 import type { Note, Share } from './types'
 
 const ME = 'me-id'
@@ -73,5 +73,29 @@ describe('sharing', () => {
     expect(shareSummary([share({ person: { id: 'a', name: 'Ayşe', email: 'ayse@example.com', picture: null } })])).toBe('Ayşe ile paylaşıldı')
     expect(shareSummary([share({ status: 'pending' })])).toBe('ayse ile paylaşıldı (1 bekliyor)')
     expect(shareSummary([])).toBe('')
+  })
+})
+
+describe('the shared mark on a note', () => {
+  const AYSE = { id: 'ayse-id', name: 'Ayşe', email: 'ayse@example.com', picture: null }
+
+  it('says who your folder is shared with', () => {
+    const mine = [share({ path: ['Alışveriş'], person: AYSE })]
+    expect(shareMark(note({ path: ['Alışveriş', 'Market'] }), mine, [], ME)).toBe('Ayşe ile paylaşıldı')
+  })
+
+  it('counts invitations that are still waiting', () => {
+    const mine = [share({ path: ['Alışveriş'], status: 'pending' })]
+    expect(shareMark(note({}), mine, [], ME)).toBe('ayse ile paylaşıldı (1 bekliyor)')
+  })
+
+  it('says whose folder it is when someone shared it with you', () => {
+    const withMe = [share({ owner: KAAN })]
+    expect(shareMark(note({ ownerId: KAAN.id }), [], withMe, ME)).toBe('Kaan ile paylaşılan klasörde')
+  })
+
+  it('stays out of the way for a note nobody else can see', () => {
+    expect(shareMark(note({}), [], [], ME)).toBeNull()
+    expect(shareMark(note({ path: ['Kişisel'] }), [share({ path: ['Alışveriş'] })], [], ME)).toBeNull()
   })
 })

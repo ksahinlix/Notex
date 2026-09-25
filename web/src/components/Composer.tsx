@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Clock, ImagePlus, ListChecks, Loader2, Maximize2, Minimize2, Plus, Sparkles, X } from 'lucide-react'
 import { useCategorySuggestion } from '../ai/useAi'
 import { formatDate } from '../lib/format'
@@ -7,6 +7,7 @@ import { blocksToText } from '../lib/paste'
 import { repeatLabel } from '../lib/recurrence'
 import { parseReminder } from '../lib/reminder'
 import { parsePath } from '../lib/tree'
+import { onFocusComposer } from '../state/composer'
 import { store } from '../state/store'
 import ReminderPicker, { type ReminderChoice } from './ReminderPicker'
 import RichEditor, { type RichEditorHandle } from './RichEditor'
@@ -65,6 +66,16 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
       setPathSource('ai')
     }
   }
+
+  // "Bu klasöre not ekle" elsewhere on the page opens the composer here.
+  useEffect(
+    () =>
+      onFocusComposer(() => {
+        setOpen(true)
+        editor.current?.focus()
+      }),
+    [],
+  )
 
   const category = useCategorySuggestion(text, pathSource === 'ai')
   const result = category.result

@@ -522,3 +522,16 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .version-tag .link { font-size: 11px; color: var(--reminder); }
 .agenda-edit { margin-bottom: 8px; }
 .agenda-edit .note { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+
+/* Notes other people can see (the tooltip says who). */
+.shared-mark { display: inline-flex; align-items: center; color: var(--text-muted); flex: none; cursor: help; }
+.shared-mark:focus-visible { outline: 2px solid var(--accent); border-radius: 3px; }
+
+/* Notes other people can see (the tooltip says who). */
+.shared-mark { display: inline-flex; align-items: center; color: var(--text-muted); flex: none; cursor: help; }
+.shared-mark:focus-visible { outline: 2px solid var(--accent); border-radius: 3px; }
+
+/* "Bu klasöre not ekle" beside the open folder's name. */
+.crumb { display: flex; align-items: center; gap: 8px; }
+.crumb .ellipsis { min-width: 0; }
+.add-here { margin-left: auto; flex: none; font-size: 12px; padding: 5px 9px; }
