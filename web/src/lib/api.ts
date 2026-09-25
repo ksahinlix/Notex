@@ -1,6 +1,6 @@
 // Thin client for the Notex server API. Cookies carry the login session.
 
-import type { Note, ProtectedFolder, Share } from './types'
+import type { Note, Person, ProtectedFolder, Share } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -52,7 +52,7 @@ export const api = {
   deleteNote: (id: string) => request<null>('DELETE', `/api/notes/${encodeURIComponent(id)}`),
 
   // Shared folders (D18).
-  listShares: () => request<{ mine: Share[]; withMe: Share[] }>('GET', '/api/shares'),
+  listShares: () => request<{ mine: Share[]; withMe: Share[]; contacts: Person[] }>('GET', '/api/shares'),
   createShare: (path: string[], email: string) => request<Share>('POST', '/api/shares', { path, email }),
   acceptShare: (by: { token: string } | { id: string }) => request<Share>('POST', '/api/shares/accept', by),
   removeShare: (id: string) => request<null>('DELETE', `/api/shares/${encodeURIComponent(id)}`),

@@ -535,3 +535,8 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .crumb { display: flex; align-items: center; gap: 8px; }
 .crumb .ellipsis { min-width: 0; }
 .add-here { margin-left: auto; flex: none; font-size: 12px; padding: 5px 9px; }
+
+/* People you have shared with before (D19). */
+.share-label { margin-top: 14px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+.share-known { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.share-known .btn { font-size: 12px; padding: 5px 9px; }

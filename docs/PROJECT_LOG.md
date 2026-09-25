@@ -51,6 +51,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D14 | Reminders are detected from text by a rule-based Turkish parser | Active |
 | D17 | Dark mode through CSS variables; Sistem/Açık/Koyu remembered per browser | Active |
 | D18 | Folders can be shared with other people by e-mail invite; everyone invited may edit | Active |
+| D19 | Someone who accepted a folder from you is not asked again for the next one | Active |
 
 ### D1 — Start from scratch
 - **What:** New repository structure. `docs/prototype.jsx` is kept only as a
@@ -439,6 +440,26 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   for their own completion state on a shared reminder.
 
 ---
+
+---
+
+### D19 — Asked once, not every time
+- **Decision:** the first folder you share with someone is an invitation they
+  accept. After that, another folder from **the same person** simply appears
+  for them, already accepted (`createShare` looks for an earlier accepted
+  share with that e-mail).
+- **Why:** the acceptance step exists so nobody can push content at a
+  stranger. Once they have accepted you once, repeating it is friction with
+  no safety left to buy — the shopping list and the bills are the same two
+  people.
+- **They keep the way out:** leaving a share is one click and only affects
+  them, and the owner can withdraw it at any time. Neither side is stuck.
+- **What it also gives:** the people who accepted are offered in the Paylaş
+  dialog (`contacts`), so a second folder is one tap and no typing.
+- **Supersedes** the part of D18 that said nothing is shared until the invitee
+  accepts: that still holds for the **first** folder from a given person.
+- **Revisit when:** someone wants to be asked every time, or to block a person
+  entirely (today they can only leave each folder).
 
 ---
 
@@ -1254,3 +1275,25 @@ names Ayşe, the strip and reminders page mark both your own shared reminders
 and Kaan's, the button appears only with a folder open, puts the cursor in the
 composer with the path filled, saves into that folder rather than one the AI
 picked, works from the ⋯ menu, and is reachable on a phone.
+
+### 2026-09-25 — Sharing without asking twice, and clearer wording (v1.3.0)
+**What:**
+- **D19: asked once, not every time.** `createShare` marks a share accepted
+  straight away when that person has already accepted a folder from you.
+  `GET /api/shares` also returns `contacts` — the people who accepted — and
+  the Paylaş dialog offers them as one-tap buttons above the list of who can
+  already see this folder. The e-mail box stays for someone new.
+- **The dialog now reads as two lists:** "Daha önce paylaştıkların" (tap to
+  add) and "Bu klasörü görenler", each person marked *katıldı* or *davet
+  bekliyor*, with the copy-link button only where a link is still needed.
+- **Clearer marks.** A folder somebody shared with you now says **"Kaan
+  paylaştı"** instead of "Kaan ile paylaşılan klasörde", and several people
+  read naturally: "Ayşe ve Irmak ile paylaşıldı", "Ayşe, Irmak ve Mehmet ile
+  paylaşıldı", with " · 1 davet bekliyor" appended when an invitation is
+  still out.
+
+**How verified:** 35 server tests (2 new: the second folder needs no
+acceptance and can still be left; contacts list people who accepted, once each,
+and never someone who didn't) and 145 web tests, lint, build. Browser test,
+19 checks, including the dialog offering Irmak, her joining with no invitation
+and dropping off the offer row.

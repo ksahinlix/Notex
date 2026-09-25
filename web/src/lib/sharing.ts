@@ -76,12 +76,18 @@ export function inviteTokenFrom(url: { pathname: string; hash: string }): string
   return m ? decodeURIComponent(m[1]) : null
 }
 
+/** "Ayşe", "Ayşe ve Irmak", "Ayşe, Irmak ve Mehmet". */
+export function nameList(names: string[]): string {
+  if (names.length < 2) return names[0] ?? ''
+  return `${names.slice(0, -1).join(', ')} ve ${names[names.length - 1]}`
+}
+
 /** Turkish summary of who a folder is shared with, for the sidebar tooltip. */
 export function shareSummary(shares: Share[]): string {
   if (!shares.length) return ''
-  const names = shares.map((s) => personName(s.person ?? { name: null, email: s.invitedEmail }))
+  const names = nameList(shares.map((s) => personName(s.person ?? { name: null, email: s.invitedEmail })))
   const waiting = shares.filter((s) => s.status === 'pending').length
-  return `${names.join(', ')} ile paylaşıldı${waiting ? ` (${waiting} bekliyor)` : ''}`
+  return `${names} ile paylaşıldı${waiting ? ` · ${waiting} davet bekliyor` : ''}`
 }
 
 /**
@@ -91,7 +97,7 @@ export function shareSummary(shares: Share[]): string {
  */
 export function shareMark(note: Note, mine: Share[], withMe: Share[], userId: string | null): string | null {
   const from = shareOf(note, withMe, userId)
-  if (from) return `${personName(from.owner)} ile paylaşılan klasörde`
+  if (from) return `${personName(from.owner)} paylaştı`
   const here = sharesForPath(mine, note.path)
   return here.length ? shareSummary(here) : null
 }

@@ -11,7 +11,7 @@ import { createProtectedFolder, unlockFolder } from '../lib/crypto'
 import { newNote, nowIso, open, seal } from '../lib/notes'
 import { folderMoveError, pathAfterFolderMove } from '../lib/move'
 import { findProtectedAncestor, pathKeyOf, pathStartsWith } from '../lib/tree'
-import type { Note, NoteContent, ProtectedFolder, Share } from '../lib/types'
+import type { Note, NoteContent, Person, ProtectedFolder, Share } from '../lib/types'
 
 export interface PasswordRequest {
   mode: 'set' | 'unlock'
@@ -29,6 +29,8 @@ export interface State {
   shares: Share[]
   /** Folders others share with you, accepted or still waiting. */
   sharedWithMe: Share[]
+  /** People who already accepted a folder from you, to invite again in one tap (D19). */
+  contacts: Person[]
   /** The signed-in user, so foreign notes can be told apart. */
   userId: string | null
   /** pathKey -> folder key, only while unlocked. Never persisted. */
@@ -39,7 +41,7 @@ export interface State {
   pwdRequest: PasswordRequest | null
 }
 
-const initial: State = { loaded: false, notes: [], folders: [], shares: [], sharedWithMe: [], userId: null, keys: {}, plain: {}, syncError: '', pwdRequest: null }
+const initial: State = { loaded: false, notes: [], folders: [], shares: [], sharedWithMe: [], contacts: [], userId: null, keys: {}, plain: {}, syncError: '', pwdRequest: null }
 
 const byNewest = (a: Note, b: Note) => b.createdAt.localeCompare(a.createdAt)
 
@@ -81,7 +83,7 @@ export class NotexStore {
       const s = await shares
       this.set({
         notes: n.notes.sort(byNewest), folders: f.folders,
-        shares: s?.mine ?? [], sharedWithMe: s?.withMe ?? [],
+        shares: s?.mine ?? [], sharedWithMe: s?.withMe ?? [], contacts: s?.contacts ?? [],
         userId: userId ?? this.state.userId, loaded: true,
         syncError: s ? '' : 'Paylaşımlar yüklenemedi; kendi notların açık.',
       })
@@ -390,7 +392,7 @@ export class NotexStore {
 
   private async refreshShares() {
     const s = await api.listShares()
-    this.set({ shares: s.mine, sharedWithMe: s.withMe })
+    this.set({ shares: s.mine, sharedWithMe: s.withMe, contacts: s.contacts ?? [] })
   }
 
   /** Invites someone to a folder. Returns the invite (with its link token) or an error. */
