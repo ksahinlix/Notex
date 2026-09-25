@@ -591,7 +591,20 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .shared-mark .face {
   width: 17px; height: 17px; border-radius: 50%; font-size: 8px; font-weight: 700; letter-spacing: -0.02em;
   display: inline-flex; align-items: center; justify-content: center; object-fit: cover;
-  border: 1.5px solid var(--surface); background: var(--accent-soft); color: var(--accent); flex: none;
+  border: 1.5px solid var(--surface); flex: none;
+  /* --face-h comes from the person (SharedMark.tsx); the theme sets how light. */
+  background: hsl(var(--face-h, 240) 60% 88%);
+  color: hsl(var(--face-h, 240) 55% 30%);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .shared-mark .face {
+    background: hsl(var(--face-h, 240) 30% 30%);
+    color: hsl(var(--face-h, 240) 70% 84%);
+  }
+}
+:root[data-theme='dark'] .shared-mark .face {
+  background: hsl(var(--face-h, 240) 30% 30%);
+  color: hsl(var(--face-h, 240) 70% 84%);
 }
 .shared-mark .face + .face { margin-left: -6px; }
 .shared-mark .face.more { background: var(--border); color: var(--text-muted); }

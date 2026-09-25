@@ -1367,6 +1367,48 @@ horizontal scroll), and the guided tour walked through on both layouts
 
 **Next:** run the checks above locally, then deploy. Maybe bundle the fonts.
 
+### 2026-09-25 — The new look, merged and actually run (v1.5.0)
+The redesign above was written against v1.3.0 in a session with no npm
+registry, so nothing in it had been run. Applied here at its own base commit
+and merged forward, which is why the faces (v1.4.0) and this entry survive it.
+
+**Merge:** only `index.css` and this log conflicted. The narrow-phone rules
+from v1.4.0 were **dropped rather than ported**, because the new frame deletes
+`.topbar` and `.view-tabs` outright; the 360 px width is re-checked against
+the new layout instead (below). The reminder-picker sheet and the shared
+faces merged untouched.
+
+**First real run of the checks it never had:** 150 web tests, lint and build
+all pass.
+
+**One fault found and fixed:** the initials circles kept their light pastel in
+dark mode, because the colour was computed in JavaScript. Only the hue is set
+inline now (`--face-h`); how light it is belongs to the theme, so dark mode
+gets a deep circle with light letters.
+
+**Browser checks, all against the built app:**
+- New frame, 37 checks at 1440×960 and 360×780 (a Galaxy S23), light and
+  dark: sidebar and its badges, one locked card for two locked notes, the
+  composer folding and saving, folder → page title, the two search groups and
+  the "skipped locked folder" card, `/` and Esc, the tab bar, the folder
+  sheet closing when a folder is picked, the full-screen composer keeping a
+  draft through **Kapat**, the password sheet, no page errors, and **no
+  sideways scroll at 360 px** in the new layout.
+- The older suites, updated for the new frame and green again: dark mode
+  (16), reminders editing and renaming (18), sharing and faces (14),
+  overlays at 360 px (31).
+- Two things that looked like defects were checked and were not: a note
+  someone shares with you is absent from the main list **by design** (it
+  lives under "Paylaşılan"), and a blue block under the folder sheet was a
+  screenshot taken mid-paint.
+
+**Left as the patch made it:** the "Bu klasöre not ekle" button above the list
+is gone; a folder's ⋯ menu still has it, and the composer under the title now
+says "Notlar klasörüne yaz…" with the path filled in.
+
+**Still open:** the fonts come from Google's CDN on every visit — worth
+bundling.
+
 ### 2026-09-25 — A Galaxy S23 scrolled sideways; faces instead of an icon (v1.4.0)
 **Reported:** "there is too small lateral scrolling" on an S23, and the shared
 mark's tooltip "runs slow — is it bringing from db every time?"

@@ -12,11 +12,8 @@ function Face({ person }: { person: Person }) {
   return person.picture ? (
     <img className="face" src={person.picture} alt="" referrerPolicy="no-referrer" title={personName(person)} />
   ) : (
-    <span
-      className="face"
-      title={personName(person)}
-      style={{ background: `hsl(${hue} 60% 88%)`, color: `hsl(${hue} 55% 30%)` }}
-    >
+    // Only the hue is set here; how light it is belongs to the theme (index.css).
+    <span className="face" title={personName(person)} style={{ '--face-h': hue } as React.CSSProperties}>
       {initials(person)}
     </span>
   )
