@@ -73,8 +73,8 @@ describe('sharing', () => {
     expect(shareSummary([share({ person: { id: 'a', name: 'Ayşe', email: 'ayse@example.com', picture: null } })])).toBe('Ayşe ile paylaşıldı')
     expect(shareSummary([share({ status: 'pending' })])).toBe('ayse ile paylaşıldı · 1 davet bekliyor')
     const two = [
-      share({ person: { id: 'a', name: 'Ayşe', email: 'a@x.com', picture: null } }),
-      share({ person: { id: 'b', name: 'Irmak', email: 'i@x.com', picture: null } }),
+      share({ invitedEmail: 'a@x.com', person: { id: 'a', name: 'Ayşe', email: 'a@x.com', picture: null } }),
+      share({ invitedEmail: 'i@x.com', person: { id: 'b', name: 'Irmak', email: 'i@x.com', picture: null } }),
     ]
     expect(shareSummary(two)).toBe('Ayşe ve Irmak ile paylaşıldı')
     expect(shareSummary([])).toBe('')
@@ -137,5 +137,41 @@ describe('faces on a shared note', () => {
 
   it('shows nothing for a note only you can see', () => {
     expect(sharePeople(note({}), [], [], ME)).toBeNull()
+  })
+})
+
+// A note inside a shared subfolder matches the subfolder's share *and* the
+// parent's. The same person must not be counted, drawn or named twice.
+describe('the same person through two folders', () => {
+  const IRMAK = { id: 'irmak-id', name: 'Irmak', email: 'irmak@example.com', picture: null }
+
+  it('shows one face, not one per share', () => {
+    const mine = [share({ path: ['Ev', 'Alışveriş'], invitedEmail: 'irmak@example.com', person: IRMAK }), share({ path: ['Ev'], invitedEmail: 'irmak@example.com', person: IRMAK })]
+    const got = sharePeople(note({ path: ['Ev', 'Alışveriş'] }), mine, [], ME)
+    expect(got?.people.map((p) => p.email)).toEqual(['irmak@example.com'])
+    expect(got?.label).toBe('Irmak ile paylaşıldı')
+  })
+
+  it('counts an invitation as waiting only while none of them is accepted', () => {
+    const accepted = share({ path: ['Ev'], invitedEmail: 'irmak@example.com', person: IRMAK })
+    const waiting = share({ path: ['Ev', 'Alışveriş'], invitedEmail: 'irmak@example.com', status: 'pending', person: null })
+    expect(shareSummary([waiting, accepted])).toBe('Irmak ile paylaşıldı')
+    // On its own the waiting invite has no account behind it, so it can only
+    // be named by its address.
+    expect(shareSummary([waiting])).toBe('irmak ile paylaşıldı · 1 davet bekliyor')
+  })
+
+  it('still lists different people once each', () => {
+    const mine = [
+      share({ path: ['Ev'], invitedEmail: 'irmak@example.com', person: IRMAK }),
+      share({ path: ['Ev', 'Alışveriş'], invitedEmail: 'ayse@example.com', person: { id: 'a', name: 'Ayşe', email: 'ayse@example.com', picture: null } }),
+    ]
+    const got = sharePeople(note({ path: ['Ev', 'Alışveriş'] }), mine, [], ME)
+    expect(got?.people.map((p) => p.name)).toEqual(['Irmak', 'Ayşe'])
+  })
+
+  it('matches addresses however they are typed', () => {
+    const mine = [share({ path: ['Ev'], invitedEmail: 'Irmak@Example.com', person: null }), share({ path: ['Ev', 'Alışveriş'], invitedEmail: 'irmak@example.com', person: null })]
+    expect(sharePeople(note({ path: ['Ev', 'Alışveriş'] }), mine, [], ME)?.people).toHaveLength(1)
   })
 })
