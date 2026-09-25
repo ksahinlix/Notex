@@ -26,6 +26,7 @@ import InviteBanner from './InviteBanner'
 import { ToastHost } from './ToastHost'
 import ThemeToggle from './ThemeToggle'
 import Tour from './Tour'
+import TreeToggle from './TreeToggle'
 
 const PATH_OPTIONS_ID = 'notex-paths'
 
@@ -37,6 +38,8 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
   const [selectedPath, setSelectedPath] = useState<string[] | null>(null)
   /** The folder picked under "Paylaşılan", if any (D18). */
   const [sharedPick, setSharedPick] = useState<{ ownerId: string; path: string[] } | null>(null)
+  /** Phones: the folder tree is folded away until asked for. */
+  const [treeOpen, setTreeOpen] = useState(false)
   const [query, setQuery] = useState('')
   // Reader: the open note and the list ← → moves through.
   const [reader, setReader] = useState<{ id: string; list: string[] } | null>(null)
@@ -250,7 +253,13 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
         </div>
 
         <div className="layout">
-          <div className="sidebar-wrap" data-tour="tree">
+          <div className={`sidebar-wrap ${treeOpen ? 'open' : ''}`} data-tour="tree">
+            <TreeToggle
+              open={treeOpen}
+              label={sharedPick ? sharedPick.path.join(' / ') : selectedPath ? selectedPath.join(' / ') : 'Tüm klasörler'}
+              count={visible.length}
+              onToggle={() => setTreeOpen((o) => !o)}
+            />
             <Sidebar
               tree={tree}
               selectedPath={selectedPath}
@@ -261,6 +270,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
               onSelect={(p) => {
                 setSelectedPath(p)
                 setSharedPick(null)
+                setTreeOpen(false)
               }}
               onLockClick={onLockClick}
               onDropNote={(id, path) => {
@@ -276,6 +286,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
               onSelect={(pick) => {
                 setSharedPick(pick)
                 if (pick) setSelectedPath(null)
+                setTreeOpen(false)
               }}
             />
             {treeError && <div className="error" style={{ marginTop: 6 }}>{treeError}</div>}

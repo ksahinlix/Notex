@@ -1,0 +1,21 @@
+{
+  "name": "Notex — akıllı notlar",
+  "short_name": "Notex",
+  "description": "Notlarını yaz, yapay zekâ klasörlere ayırsın. Hatırlatmalar, şifreli klasörler ve paylaşım.",
+  "lang": "tr",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f7f7f8",
+  "theme_color": "#f7f7f8",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Hatırlatmalar", "url": "/#hatirlatmalar" }
+  ]
+}

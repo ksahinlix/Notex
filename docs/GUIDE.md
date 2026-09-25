@@ -483,6 +483,8 @@ Browser: Google button → ID token ──POST /api/auth/google──▶ Server:
 | **CSS variables + `prefers-color-scheme`** | `index.css`, `lib/theme.ts` | dark mode that follows the device or the user's choice |
 | **URL hash** | `#hatirlatmalar` | the Reminders page survives reload |
 | **Build-time constant** (`define`) | `lib/version.ts` | the version under the composer, compared with the server |
+| **Web app manifest + service worker** | `public/manifest.webmanifest`, `public/sw.js` | install to the home screen, and an offline app shell |
+| **`pointer: coarse` media query** | `index.css` | bigger buttons on touch screens, unchanged with a mouse |
 
 ---
 

@@ -241,15 +241,53 @@ textarea {
   background: var(--surface); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 
+/* The folder tree's fold-away button (shown by the phone query below). */
+.tree-toggle {
+  display: none; align-items: center; gap: 6px; width: 100%; margin-bottom: 8px;
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer;
+}
+.tree-toggle .count { margin-left: auto; }
+
 @media (max-width: 680px) {
-  .page { padding: 16px 16px 240px; }
+  .page { padding: 16px 16px 150px; }
   .layout { flex-direction: column; align-items: stretch; }
   .sidebar-wrap { width: 100%; position: static; }
-  .sidebar { max-height: 200px; }
+  .sidebar { max-height: 220px; }
   .composer-bar { padding-left: 8px; padding-right: 8px; }
   .composer-row { flex-wrap: wrap; }
   .path-input { flex: 1 1 100%; }
+
+  /* Until you start writing, the composer is one line: on a phone it used to
+     take a third of the screen, leaving room for barely two notes. */
+  .composer-bar:not(.open) .composer { padding: 8px 12px; }
+  .composer-bar:not(.open) .composer-row,
+  .composer-bar:not(.open) .reminder-chip,
+  .composer-bar:not(.open) .chips { display: none; }
+  .composer-bar:not(.open) .composer-editor {
+    max-height: 26px; overflow: hidden; min-height: 0;
+  }
+  .composer-bar:not(.open) .editor.empty::before {
+    display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .composer-bar.open .page-veil { display: block; }
+  /* The folder tree folds away; the button above it says what is selected. */
+  .tree-toggle { display: flex; }
+  .sidebar-wrap:not(.open) .sidebar { display: none; }
 }
+
+/* Touch screens: fingers need room the mouse doesn't (44px is the guideline). */
+@media (pointer: coarse) {
+  .icon-btn { padding: 10px; }
+  .btn { padding: 9px 12px; }
+  .tree-row { padding: 9px 8px; }
+  .reminder-done { width: 26px; height: 26px; }
+  .checkbox { width: 22px; height: 22px; margin-top: 13px; }
+  .note-actions { gap: 0; }
+  .agenda-actions { gap: 0; }
+  .link { padding: 2px 0; }
+}
+
 
 /* ---- AI ---- */
 .c-accent { color: var(--accent); }
