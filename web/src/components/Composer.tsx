@@ -11,7 +11,7 @@ import { onFocusComposer } from '../state/composer'
 import { store } from '../state/store'
 import ReminderPicker, { type ReminderChoice } from './ReminderPicker'
 import RichEditor, { type RichEditorHandle } from './RichEditor'
-import VersionTag from './VersionTag'
+import { useIsPhone } from './useIsPhone'
 
 interface Props {
   selectedPath: string[] | null
@@ -25,7 +25,8 @@ type PathSource = 'ai' | 'user' | 'selection'
 /** Reminder: detected from the text, set by hand, or dismissed by the user. */
 type ReminderMode = 'auto' | 'manual' | 'dismissed'
 
-// Bottom bar for writing new notes.
+// Writing new notes: a card at the top of the page on computers (one dashed
+// line until you click it), full screen on phones (opened by "Not yaz").
 // - The server's AI (D15) proposes a folder, existing or new, plus similar
 //   existing folders as alternatives. It is only asked while the path is left
 //   to AI, so a chosen path (e.g. a locked folder) never sends the text anywhere.
@@ -41,8 +42,9 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
   const [imagesLoading, setImagesLoading] = useState(false)
   const [editorKey, setEditorKey] = useState(0)
   const [expanded, setExpanded] = useState(false)
-  /** Phones: the bar is one line until you start writing (see .composer-bar.open). */
+  /** Open = writing. Closed it is one dashed line (computers) or hidden (phones). */
   const [open, setOpen] = useState(false)
+  const isPhone = useIsPhone()
   const [path, setPath] = useState('')
   const [pathSource, setPathSource] = useState<PathSource>('ai')
   const [isListItem, setIsListItem] = useState(false)
@@ -72,7 +74,8 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
     () =>
       onFocusComposer(() => {
         setOpen(true)
-        editor.current?.focus()
+        // on phones the composer is only on screen once it is open
+        setTimeout(() => editor.current?.focus())
       }),
     [],
   )
@@ -134,21 +137,48 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
     setBusy(false)
     if (!ok) return setError('Şifre girilmeden bu klasöre kaydedilemez.')
     reset()
-    setTimeout(() => editor.current?.focus())
+    // Computers: ready for the next note. Phones: back to the list.
+    if (!isPhone) setTimeout(() => editor.current?.focus())
   }
 
   return (
     <div
-      className={`composer-bar ${expanded ? 'expanded' : ''} ${open || !empty || expanded ? 'open' : ''}`}
+      // Phones: closing keeps the draft, so an unsaved note can be closed and reopened.
+      className={`composer-bar ${expanded ? 'expanded' : ''} ${open || expanded || (!empty && !isPhone) ? 'open' : ''}`}
       onFocusCapture={() => setOpen(true)}
-      onKeyDown={(e) => e.key === 'Escape' && expanded && setExpanded(false)}
+      onBlurCapture={(e) => {
+        // Computers: an empty composer folds back to one line when you leave it.
+        if (!isPhone && empty && !pickerOpen && !expanded && !e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false)
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape') return
+        if (expanded) setExpanded(false)
+        else if (isPhone) setOpen(false)
+      }}
     >
+      <div className="composer-head">
+        <button className="btn btn-ghost" onClick={() => setOpen(false)}>Kapat</button>
+        <span className="composer-head-title">Yeni not</span>
+        <button
+          className="btn btn-primary"
+          onClick={() => void save()}
+          disabled={busy || imagesLoading || waitingForAi || empty || !effectivePath.trim()}
+        >
+          {imagesLoading || waitingForAi ? <Loader2 size={15} className="spin" /> : null} Kaydet
+        </button>
+      </div>
       <div className="composer card" data-tour="composer">
         <RichEditor
           key={editorKey}
           ref={editor}
           className="composer-editor"
-          placeholder="Aklına geleni yaz... Web sayfasından görselli içerik yapıştırabilirsin. Ctrl+Enter kaydeder."
+          placeholder={
+            isPhone
+              ? 'Aklına geleni yaz… Klasörünü AI seçer.'
+              : selectedPath
+                ? `${selectedPath[selectedPath.length - 1]} klasörüne yaz… Ctrl+Enter kaydeder.`
+                : 'Aklına geleni yaz… Klasörünü AI seçer. Ctrl+Enter kaydeder.'
+          }
           onChange={(t, e) => {
             setText(t)
             setEmpty(e)
@@ -158,9 +188,33 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
           onBusyChange={setImagesLoading}
         />
 
+        {(chips.length > 0 || category.loading) && (
+          <div className="suggestions" data-for={category.forText} data-loading={category.loading || undefined}>
+            {category.loading ? <Loader2 size={16} className="spin c-accent" /> : <Sparkles size={16} className="c-accent" />}
+            <span className="suggestions-label">Nereye kaydedelim?</span>
+            {chips.map((c) => {
+              const label = c.path.join(' / ')
+              return (
+                <button
+                  key={label}
+                  className={`chip ${label === effectivePath ? 'on' : ''}`}
+                  title={c.isNew ? 'AI yeni bir klasör öneriyor' : 'Mevcut klasör'}
+                  onClick={() => {
+                    setPath(label)
+                    setPathSource('user')
+                  }}
+                >
+                  {label}
+                  {c.isNew && <span className="chip-new">yeni</span>}
+                </button>
+              )
+            })}
+            {category.loading && !chips.length && <span className="muted">AI klasör düşünüyor…</span>}
+          </div>
+        )}
         {reminder && (
           <div className="reminder-chip">
-            <Clock size={12} />
+            <Clock size={15} />
             <button className="link" title="Zamanı değiştir" onClick={() => setPickerOpen(true)}>
               {reminder.at && reminder.repeat ? (
                 <>Hatırlatma: <b>{repeatLabel(reminder.at, reminder.repeat)}</b></>
@@ -201,25 +255,26 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
               setPathSource(e.target.value.trim() ? 'user' : 'ai')
             }}
           />
-          <button className={`btn btn-ghost ${isListItem ? 'on' : ''}`} title="Liste öğesi (işaretlenebilir)" onClick={() => setIsListItem(!isListItem)}>
-            <ListChecks size={14} />
+          <button className={`btn btn-ghost ${isListItem ? 'on' : ''}`} title="Liste öğesi (işaretlenebilir)" aria-label="Liste öğesi (işaretlenebilir)" aria-pressed={isListItem} onClick={() => setIsListItem(!isListItem)}>
+            <ListChecks size={17} />
           </button>
           <button
             className={`btn btn-ghost ${reminder ? 'on' : ''}`}
             title="Hatırlatma ekle"
+            aria-label="Hatırlatma ekle"
             data-tour="reminder"
             onClick={() => setPickerOpen((o) => !o)}
           >
-            <Clock size={14} />
+            <Clock size={17} />
           </button>
-          <button className="btn btn-ghost" title="Görsel ekle" onClick={() => fileRef.current?.click()}>
-            <ImagePlus size={14} />
+          <button className="btn btn-ghost" title="Görsel ekle" aria-label="Görsel ekle" onClick={() => fileRef.current?.click()}>
+            <ImagePlus size={17} />
           </button>
-          <button className="btn btn-ghost" data-tour="fullscreen" title={expanded ? 'Küçült (Esc)' : 'Tam ekran yaz'} onClick={() => setExpanded(!expanded)}>
-            {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          <button className="btn btn-ghost" data-tour="fullscreen" title={expanded ? 'Küçült (Esc)' : 'Tam ekran yaz'} aria-label={expanded ? 'Küçült' : 'Tam ekran yaz'} onClick={() => setExpanded(!expanded)}>
+            {expanded ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
           </button>
           <button
-            className="btn btn-primary"
+            className="btn btn-primary save-btn"
             onClick={() => void save()}
             disabled={busy || imagesLoading || waitingForAi || empty || !effectivePath.trim()}
             title={waitingForAi ? 'AI klasörü belirliyor...' : undefined}
@@ -239,32 +294,8 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
           />
         </div>
 
-        {(chips.length > 0 || category.loading) && (
-          <div className="suggestions" data-for={category.forText} data-loading={category.loading || undefined}>
-            {category.loading ? <Loader2 size={12} className="spin c-accent" /> : <Sparkles size={12} className="c-accent" />}
-            {chips.map((c) => {
-              const label = c.path.join(' / ')
-              return (
-                <button
-                  key={label}
-                  className={`chip ${label === effectivePath ? 'on' : ''}`}
-                  title={c.isNew ? 'AI yeni bir klasör öneriyor' : 'Mevcut klasör'}
-                  onClick={() => {
-                    setPath(label)
-                    setPathSource('user')
-                  }}
-                >
-                  {label}
-                  {c.isNew && <span className="chip-new">yeni</span>}
-                </button>
-              )
-            })}
-            {category.loading && !chips.length && <span className="muted small">AI kategori düşünüyor...</span>}
-          </div>
-        )}
         {error && <div className="error">{error}</div>}
       </div>
-      {!expanded && <VersionTag />}
     </div>
   )
 }

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
-import { AlarmClock, CircleHelp, Loader2, LogOut, NotebookPen, Plus, Search, Sparkles, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { AlarmClock, CircleHelp, FolderClosed, Loader2, Lock, LockOpen, LogOut, NotebookPen, Plus, Search, Sparkles, X } from 'lucide-react'
 import { clearSearchCache, useSemanticSearch } from '../ai/useAi'
-import { isReminderNote } from '../lib/agenda'
+import { buildAgenda, isReminderNote } from '../lib/agenda'
 import { queryTerms } from '../lib/highlight'
 import { markTourDone, tourDone } from '../lib/tour'
 import { isSharedPath, ownNotes, sharedFolders } from '../lib/sharing'
@@ -24,10 +24,11 @@ import UpcomingStrip from './UpcomingStrip'
 import Sidebar from './Sidebar'
 import SharedTree from './SharedTree'
 import InviteBanner from './InviteBanner'
+import LockedCard from './LockedCard'
+import VersionTag from './VersionTag'
 import { ToastHost } from './ToastHost'
 import ThemeToggle from './ThemeToggle'
 import Tour from './Tour'
-import TreeToggle from './TreeToggle'
 
 const PATH_OPTIONS_ID = 'notex-paths'
 
@@ -76,10 +77,34 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
 
   // Reminders live on their own page, not in the notes tree or list.
   const plainNotes = useMemo(() => mine.filter((n) => !isReminderNote(n)), [mine])
-  const reminderCount = state.notes.length - state.notes.filter((n) => !isReminderNote(n)).length
+  // Reminder counts for the sidebar and the tab bar (checked every minute).
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(t)
+  }, [])
+  const agenda = useMemo(() => buildAgenda(state.notes, now), [state.notes, now])
+  const overdueCount = agenda.overdue.length
+  // Reminders, not occurrences: a monthly bill counts once.
+  const activeReminders = new Set([...agenda.overdue, ...agenda.months.flatMap((m) => m.items), ...agenda.undated].map((i) => i.note.id)).size
   const tree = useMemo(() => buildTree(plainNotes), [plainNotes])
   const paths = useMemo(() => allPaths(tree).map((p) => p.join(' / ')), [tree])
   const contentOf = (n: Note) => store.contentOf(n)
+
+  // "/" jumps to the search box (unless you're typing somewhere).
+  const searchRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return
+      e.preventDefault()
+      setView('notes')
+      setTimeout(() => searchRef.current?.focus())
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   // Notes changed: earlier AI search answers may be outdated.
   useEffect(clearSearchCache, [state.notes])
@@ -108,7 +133,6 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
   const byId = new Map(state.notes.map((n) => [n.id, n]))
   const keywordIds = new Set(keywordHits.map((n) => n.id))
   const meaningHits = (semantic.ids ?? []).flatMap((id) => (keywordIds.has(id) ? [] : (byId.get(id) ?? [])))
-  const meaningIds = new Set(meaningHits.map((n) => n.id))
   const visible = !searching ? scoped : [...keywordHits, ...meaningHits]
   const readerIndex = reader ? reader.list.indexOf(reader.id) : -1
   const readerNote = reader ? (byId.get(reader.id) ?? null) : null
@@ -164,14 +188,83 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
     })
   }
 
+  /**
+   * Locked notes are shown as one card per locked folder. Key: the protected
+   * folder's pathKey (or the note's own folder if none is found).
+   */
+  const lockKeyOf = (n: Note) => findProtectedAncestor(state.folders, n.path)?.pathKey ?? pathKeyOf(n.path)
+  function lockedGroups(notes: Note[]) {
+    const m = new Map<string, { key: string; path: string[]; count: number; firstId: string }>()
+    for (const n of notes) {
+      if (contentOf(n)) continue
+      const key = lockKeyOf(n)
+      const g = m.get(key) ?? { key, path: key.split('/'), count: 0, firstId: n.id }
+      g.count++
+      m.set(key, g)
+    }
+    return m
+  }
+  const unlockFolder = (key: string) => {
+    if (state.folders.some((f) => f.pathKey === key)) void store.unlock(key)
+  }
+
+  /** "Yeni not" / "Not yaz": opens the composer (full screen on phones). */
+  function newNote() {
+    setTreeOpen(false)
+    focusComposer()
+  }
+
   function unlockNote(n: Note) {
     const folder = findProtectedAncestor(state.folders, n.path)
     if (folder) void store.unlock(folder.pathKey)
   }
 
 
+  const userAvatar = user.picture ? (
+    <img src={user.picture} alt="" referrerPolicy="no-referrer" />
+  ) : (
+    <span className="user-initial">{(user.name || user.email)[0].toLocaleUpperCase('tr')}</span>
+  )
+  const openTour = () => {
+    setView('notes')
+    setTreeOpen(false)
+    setTourOpen(true)
+  }
+
+  // Page title: the open folder (or "Tüm notlar"), its parents above it.
+  const headPath = sharedPick ? sharedPick.path : selectedPath
+  const sharedOwner = sharedPick ? shared.find((f) => f.ownerId === sharedPick.ownerId && f.path.join('/') === sharedPick.path.join('/'))?.ownerName : null
+  const crumbParts = [...(sharedOwner ? [`${sharedOwner} paylaştı`] : []), ...(headPath ? headPath.slice(0, -1) : [])]
+  const selKey = selectedPath && !sharedPick ? pathKeyOf(selectedPath) : null
+  const selProtected = !!selKey && state.folders.some((f) => f.pathKey === selKey)
+  const selUnlocked = selProtected && !!state.keys[selKey!]
+
+  const listGroups = lockedGroups(visible)
+  const searchLocked = searching ? [...lockedGroups(state.notes).values()] : []
+
+  const card = (n: Note) => (
+    <NoteCard
+      key={n.id}
+      note={n}
+      content={contentOf(n)}
+      pathOptionsId={PATH_OPTIONS_ID}
+      folderPaths={paths}
+      terms={searching ? terms : undefined}
+      onOpenReader={() => openReader(n.id, visible.map((x) => x.id))}
+      onMove={(note, path, exact) => void moveNote(note, path, exact)}
+      tourTarget={n.id === visible.find((x) => contentOf(x))?.id}
+      onSelectPath={(p) => {
+        setQuery('')
+        setSelectedPath(p)
+        setSharedPick(null)
+      }}
+      onImageClick={setLightbox}
+      onUnlock={() => unlockNote(n)}
+    />
+  )
+
   return (
-    <>
+    <div className={`app ${treeOpen ? 'tree-open' : ''} ${touring ? 'touring' : ''}`}>
       <PasswordModal request={state.pwdRequest} />
       <ConfirmHost />
       <ToastHost />
@@ -194,73 +287,43 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
         {paths.map((p) => <option key={p} value={p} />)}
       </datalist>
 
-      <main className="page">
-        <header className="topbar">
-          <nav className="view-tabs" aria-label="Görünüm">
-            <button className={view === 'notes' ? 'on' : ''} onClick={() => setView('notes')}>
-              <NotebookPen size={14} /> Notlar
-            </button>
-            <button className={view === 'reminders' ? 'on' : ''} data-tour="reminders-tab" onClick={() => setView('reminders')}>
-              <AlarmClock size={14} /> Hatırlatmalar {reminderCount > 0 && <span className="tab-count">{reminderCount}</span>}
-            </button>
-          </nav>
-          <div className="topbar-actions">
-            <ThemeToggle />
-            <button
-              className="btn btn-ghost"
-              data-tour="help"
-              title="Kullanım turu"
-              aria-label="Kullanım turu"
-              onClick={() => {
-                setView('notes')
-                setTourOpen(true)
-              }}
-            >
-              <CircleHelp size={14} />
-            </button>
-            <span className="user-chip" title={user.email}>
-              {user.picture ? <img src={user.picture} alt="" referrerPolicy="no-referrer" /> : <span className="user-initial">{(user.name || user.email)[0].toLocaleUpperCase('tr')}</span>}
-              <span className="user-name">{user.name || user.email}</span>
-            </span>
-            <button className="btn btn-ghost" onClick={onLogout} title="Çıkış"><LogOut size={14} /></button>
-          </div>
-        </header>
-
-        {state.syncError && (
-          <div className="banner-error">
-            {state.syncError}
-            <button className="icon-btn" onClick={() => store.dismissError()} aria-label="Kapat"><X size={12} /></button>
-          </div>
-        )}
-
-        {view === 'reminders' ? (
-          <RemindersPage
-            notes={state.notes}
-            contentOf={contentOf}
-            onOpenReader={openReader}
-            pathOptionsId={PATH_OPTIONS_ID}
-            folderPaths={paths}
-            onRenameFolder={(folder, name) => void relocateFolder(folder, folderRenamed(folder, name))}
-          />
-        ) : (
-          <>
-        <InviteBanner invites={state.sharedWithMe} />
-        <UpcomingStrip notes={state.notes} contentOf={contentOf} onShowAll={() => setView('reminders')} />
-
-        <div className="search" data-tour="search">
-          <Search size={14} className="search-icon" />
-          <input placeholder="Notlarda ara... (anlamına göre de bulur)" value={query} onChange={(e) => setQuery(e.target.value)} />
-          {query && <button className="icon-btn search-clear" onClick={() => setQuery('')} aria-label="Temizle"><X size={13} /></button>}
+      {/* Computers: the sidebar. Phones: only its folder part, as a sheet. */}
+      <aside className="app-sidebar">
+        <div className="sb-brand">
+          <span className="logo" aria-hidden="true">N</span>
+          <span className="wordmark">Notex</span>
         </div>
+        <button className="btn btn-primary sb-new" onClick={newNote}>
+          <Plus size={17} /> Yeni not
+        </button>
+        <nav className="sb-nav" aria-label="Görünüm">
+          <button className={view === 'notes' ? 'on' : ''} aria-current={view === 'notes' ? 'page' : undefined} onClick={() => setView('notes')}>
+            <NotebookPen size={18} /> <span className="grow">Notlar</span> <span className="sb-count">{plainNotes.length}</span>
+          </button>
+          <button
+            className={view === 'reminders' ? 'on' : ''}
+            aria-current={view === 'reminders' ? 'page' : undefined}
+            data-tour="reminders-tab"
+            onClick={() => setView('reminders')}
+          >
+            <AlarmClock size={18} /> <span className="grow">Hatırlatmalar</span>
+            {overdueCount > 0 ? (
+              <span className="badge-danger">{overdueCount} gecikmiş</span>
+            ) : (
+              activeReminders > 0 && <span className="sb-count">{activeReminders}</span>
+            )}
+          </button>
+        </nav>
 
-        <div className="layout">
-          <div className={`sidebar-wrap ${treeOpen ? 'open' : ''}`} data-tour="tree">
-            <TreeToggle
-              open={treeOpen}
-              label={sharedPick ? sharedPick.path.join(' / ') : selectedPath ? selectedPath.join(' / ') : 'Tüm klasörler'}
-              count={visible.length}
-              onToggle={() => setTreeOpen((o) => !o)}
-            />
+        {view === 'notes' && (
+          <div className="sb-folders" data-tour="tree">
+            <div className="sheet-grip" aria-hidden="true" />
+            <div className="sheet-head">
+              <h2>Klasörler</h2>
+              <button className="btn btn-ghost" onClick={newNote}><Plus size={16} /> Not</button>
+              <button className="icon-btn" aria-label="Kapat" onClick={() => setTreeOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="sb-label">KLASÖRLER</div>
             <Sidebar
               tree={tree}
               selectedPath={selectedPath}
@@ -292,59 +355,182 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
             />
             {treeError && <div className="error" style={{ marginTop: 6 }}>{treeError}</div>}
           </div>
-
-          <section className="notes">
-            {searching ? (
-              selectedPath && <div className="crumb muted">Tüm notlarda aranıyor (seçili klasör: {selectedPath.join(' / ')})</div>
-            ) : (
-              (selectedPath || sharedPick) && (
-                <div className="crumb">
-                  <span className="ellipsis">{(sharedPick ?? { path: selectedPath! }).path.join(' / ')}</span>
-                  <button className="btn btn-ghost add-here" onClick={focusComposer}>
-                    <Plus size={13} /> Bu klasöre not ekle
-                  </button>
-                </div>
-              )
-            )}
-            {query.trim().length >= 2 && (
-              <div className="search-note" data-state={semantic.loading ? 'loading' : semantic.ids ? 'done' : 'off'}>
-                {semantic.loading ? <Loader2 size={11} className="spin" /> : <Sparkles size={11} />}
-                {keywordHits.length} kelime eşleşmesi
-                {semantic.ids && ` · ${meaningHits.length} anlamca ilgili`}
-                {semantic.loading && ' · AI anlamca arıyor...'}
-              </div>
-            )}
-            {semantic.error && query.trim().length >= 2 && <div className="search-error">{semantic.error}</div>}
-            {!state.loaded ? (
-              <div className="muted">Yükleniyor...</div>
-            ) : visible.length === 0 ? (
-              <div className="muted empty">{state.notes.length ? 'Bu görünümde not yok.' : 'Henüz not yok. Aşağıdan ilk notunu yaz.'}</div>
-            ) : (
-              visible.map((n) => (
-                <NoteCard
-                  key={n.id}
-                  note={n}
-                  content={contentOf(n)}
-                  pathOptionsId={PATH_OPTIONS_ID}
-                  folderPaths={paths}
-                  terms={searching ? terms : undefined}
-                  meaningMatch={meaningIds.has(n.id)}
-                  onOpenReader={() => openReader(n.id, visible.map((x) => x.id))}
-                  onMove={(note, path, exact) => void moveNote(note, path, exact)}
-                  tourTarget={n.id === visible.find((x) => contentOf(x))?.id}
-                  onSelectPath={setSelectedPath}
-                  onImageClick={setLightbox}
-                  onUnlock={() => unlockNote(n)}
-                />
-              ))
-            )}
-          </section>
-        </div>
-          </>
         )}
+
+        <div className="sb-footer">
+          <span className="user-chip" title={user.email}>
+            {userAvatar}
+            <span className="user-name">{user.name || user.email}</span>
+          </span>
+          <ThemeToggle />
+          <button className="btn btn-ghost" data-tour="help" title="Kullanım turu" aria-label="Kullanım turu" onClick={openTour}>
+            <CircleHelp size={18} />
+          </button>
+          <button className="btn btn-ghost" onClick={onLogout} title="Çıkış" aria-label="Çıkış"><LogOut size={18} /></button>
+        </div>
+      </aside>
+      <div className="sheet-veil" onClick={() => setTreeOpen(false)} />
+
+      <main className="page">
+        <div className="page-col">
+          <header className="mobile-header">
+            <span className="logo" aria-hidden="true">N</span>
+            <span className="wordmark">Notex</span>
+            <ThemeToggle />
+            <button className="btn btn-ghost" data-tour="help" title="Kullanım turu" aria-label="Kullanım turu" onClick={openTour}>
+              <CircleHelp size={18} />
+            </button>
+            <button className="btn btn-ghost" onClick={onLogout} title="Çıkış" aria-label="Çıkış"><LogOut size={18} /></button>
+            <span className="user-chip" title={user.email} style={{ flex: 'none' }}>{userAvatar}</span>
+          </header>
+
+          {state.syncError && (
+            <div className="banner-error">
+              {state.syncError}
+              <button className="icon-btn" onClick={() => store.dismissError()} aria-label="Kapat"><X size={14} /></button>
+            </div>
+          )}
+
+          {view === 'reminders' ? (
+            <div className="page-head">
+              <div className="page-head-main">
+                <h1 className="page-title">Hatırlatmalar</h1>
+                <span className="page-count">
+                  {activeReminders} aktif{overdueCount > 0 && <> · <span className="overdue">{overdueCount} gecikmiş</span></>}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <>
+              <InviteBanner invites={state.sharedWithMe} />
+              <UpcomingStrip notes={state.notes} contentOf={contentOf} onShowAll={() => setView('reminders')} />
+
+              <div className="search" data-tour="search">
+                <Search size={17} className="search-icon" />
+                <input
+                  ref={searchRef}
+                  aria-label="Notlarda ara"
+                  placeholder="Notlarda ara… anlamına göre de bulur"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Escape' && setQuery('')}
+                />
+                {query ? (
+                  <button className="icon-btn search-clear" onClick={() => setQuery('')} aria-label="Aramayı temizle"><X size={16} /></button>
+                ) : (
+                  <kbd className="search-key" title="Aramaya geçmek için / tuşuna bas">/</kbd>
+                )}
+              </div>
+
+              {!searching && (
+                <>
+                  <div className="page-head">
+                    <div className="page-head-main">
+                      {crumbParts.length > 0 && <div className="page-crumb">{crumbParts.join(' › ')} ›</div>}
+                      <div className="page-title-row">
+                        <h1 className="page-title">{headPath ? headPath[headPath.length - 1] : 'Tüm notlar'}</h1>
+                        <span className="page-count">{scoped.length} not</span>
+                      </div>
+                    </div>
+                    {selectedPath && !sharedPick && (
+                      <div className="page-actions">
+                        <button className="btn btn-ghost" onClick={() => void onLockClick(selectedPath)}>
+                          {selUnlocked ? <LockOpen size={16} /> : <Lock size={16} />}
+                          {!selProtected ? 'Şifrele' : selUnlocked ? 'Kilitle' : 'Kilidi aç'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {/* One composer for both views, so a draft survives switching. */}
+          <div className={`composer-slot ${searching && view === 'notes' ? 'searching' : ''}`}>
+            <Composer selectedPath={sharedPick ? sharedPick.path : selectedPath} pathOptionsId={PATH_OPTIONS_ID} sharedOwnerId={sharedPick?.ownerId} />
+          </div>
+
+          {view === 'reminders' ? (
+            <RemindersPage
+              notes={state.notes}
+              contentOf={contentOf}
+              onOpenReader={openReader}
+              pathOptionsId={PATH_OPTIONS_ID}
+              folderPaths={paths}
+              onRenameFolder={(folder, name) => void relocateFolder(folder, folderRenamed(folder, name))}
+            />
+          ) : searching ? (
+            // Search covers ALL notes (not just the selected folder): notes
+            // containing the words first, then notes the AI found by meaning
+            // (D15). Locked notes can't be searched: they get a card saying so.
+            <div className="results">
+              <div className="results-summary">
+                Tüm notlarda arandı{selectedPath && ` (seçili klasör: ${selectedPath.join(' / ')})`} ·{' '}
+                <b>{keywordHits.length + meaningHits.length} sonuç</b>
+              </div>
+              <section className="result-group">
+                <h2 className="result-title">
+                  <Search size={17} /> Kelimeyle eşleşenler <span className="count">{keywordHits.length}</span>
+                </h2>
+                {keywordHits.length ? keywordHits.map(card) : <div className="result-empty">Bu kelimeler hiçbir notta geçmiyor.</div>}
+              </section>
+              {query.trim().length >= 2 && (
+                <section className="result-group meaning" data-state={semantic.loading ? 'loading' : semantic.ids ? 'done' : 'off'}>
+                  <h2 className="result-title">
+                    {semantic.loading ? <Loader2 size={17} className="spin" /> : <Sparkles size={17} />} Anlamca ilgili
+                    {semantic.ids && <span className="count">{meaningHits.length}</span>}
+                    <span className="result-hint">
+                      {semantic.loading ? 'AI anlamca arıyor…' : 'aynı kelimeler yok ama konu yakın'}
+                    </span>
+                  </h2>
+                  {semantic.error && <div className="search-error">{semantic.error}</div>}
+                  {meaningHits.map(card)}
+                  {semantic.ids && !meaningHits.length && <div className="result-empty">Başka ilgili not bulunamadı.</div>}
+                </section>
+              )}
+              {searchLocked.map((g) => (
+                <LockedCard key={g.key} path={g.path} count={g.count} searching onUnlock={() => unlockFolder(g.key)} />
+              ))}
+            </div>
+          ) : (
+            <section className="notes">
+              {!state.loaded ? (
+                <div className="muted">Yükleniyor...</div>
+              ) : visible.length === 0 ? (
+                <div className="muted empty">{state.notes.length ? 'Bu görünümde not yok.' : 'Henüz not yok. İlk notunu yaz; klasörünü AI seçsin.'}</div>
+              ) : (
+                visible.map((n) => {
+                  if (contentOf(n)) return card(n)
+                  const g = listGroups.get(lockKeyOf(n))
+                  return g && g.firstId === n.id ? <LockedCard key={`lock:${g.key}`} path={g.path} count={g.count} onUnlock={() => unlockFolder(g.key)} /> : null
+                })
+              )}
+            </section>
+          )}
+          <VersionTag />
+        </div>
       </main>
 
-      <Composer selectedPath={sharedPick ? sharedPick.path : selectedPath} pathOptionsId={PATH_OPTIONS_ID} sharedOwnerId={sharedPick?.ownerId} />
-    </>
+      {/* Phones only (CSS): the "Not yaz" button and the tab bar. */}
+      <button className="fab" data-tour="composer" onClick={newNote}>
+        <Plus size={20} /> Not yaz
+      </button>
+      <nav className="tabbar" aria-label="Ana menü">
+        <button className={view === 'notes' && !treeOpen ? 'on' : ''} onClick={() => { setView('notes'); setTreeOpen(false) }}>
+          <span className="tab-icon"><NotebookPen size={20} /></span>Notlar
+        </button>
+        <button className={treeOpen ? 'on' : ''} data-tour="tree" onClick={() => { setView('notes'); setTreeOpen(true) }}>
+          <span className="tab-icon"><FolderClosed size={20} /></span>Klasörler
+        </button>
+        <button className={view === 'reminders' && !treeOpen ? 'on' : ''} data-tour="reminders-tab" onClick={() => { setView('reminders'); setTreeOpen(false) }}>
+          <span className="tab-icon">
+            <AlarmClock size={20} />
+            {overdueCount > 0 && <span className="tab-badge">{overdueCount}</span>}
+          </span>
+          Hatırlatmalar
+        </button>
+      </nav>
+    </div>
   )
 }

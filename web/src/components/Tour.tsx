@@ -5,8 +5,10 @@ import { availableSteps, TOUR_STEPS, type TourStep } from '../lib/tour'
 const PAD = 6 // space around the highlighted element
 const CARD_W = 340
 
-const find = (target: string) => document.querySelector<HTMLElement>(`[data-tour="${target}"]`)
 const visible = (el: HTMLElement | null) => !!el && el.getClientRects().length > 0
+// Some targets exist twice (sidebar on computers, tab bar on phones): use the one on screen.
+const find = (target: string) =>
+  Array.from(document.querySelectorAll<HTMLElement>(`[data-tour="${target}"]`)).find((el) => visible(el)) ?? null
 const onScreen = (s: TourStep) => !s.target || visible(find(s.target))
 
 /** Next (dir 1) or previous (dir -1) step whose element is on screen, or -1. */

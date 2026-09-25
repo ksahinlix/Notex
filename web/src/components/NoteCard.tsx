@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { BookOpen, Check, Clock, FolderInput, GripVertical, ImagePlus, Lock, MessageCircle, Pencil, Sparkles, Trash2, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { BookOpen, Check, Clock, FolderInput, GripVertical, ImagePlus, Lock, MessageCircle, MoreHorizontal, Pencil, Sparkles, Trash2, X } from 'lucide-react'
 import { formatDate } from '../lib/format'
 import { repeatLabel } from '../lib/recurrence'
 import { fileToDataUrl, imageFilesFrom } from '../lib/images'
@@ -9,6 +9,7 @@ import { parsePath } from '../lib/tree'
 import type { Note, NoteContent } from '../lib/types'
 import { confirmDialog } from '../state/confirm'
 import { store } from '../state/store'
+import LockedCard from './LockedCard'
 import MoveMenu from './MoveMenu'
 import NoteBody from './NoteBody'
 import SharedMark from './SharedMark'
@@ -63,15 +64,25 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
   const cardRef = useRef<HTMLElement>(null)
   const [moving, setMoving] = useState(false)
   const [dragging, setDragging] = useState(false)
+  // The ⋯ menu: reading mode, comment, image, delete. Closes on a click
+  // outside or Esc (a touch screen has no mouse-leave).
+  const [menuOpen, setMenuOpen] = useState(false)
+  const actionsRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!menuOpen) return
+    const outside = (e: PointerEvent) => {
+      if (!actionsRef.current?.contains(e.target as Node)) setMenuOpen(false)
+    }
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false)
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', esc)
+    return () => {
+      document.removeEventListener('pointerdown', outside)
+      document.removeEventListener('keydown', esc)
+    }
+  }, [menuOpen])
 
-  if (!content) {
-    return (
-      <div className="note locked" onClick={onUnlock}>
-        <Lock size={13} /> Kilitli not — görmek için tıkla
-        <span className="note-path">{note.path.join(' / ')}</span>
-      </div>
-    )
-  }
+  if (!content) return <LockedCard path={note.path} count={1} onUnlock={onUnlock} />
   const c = content
 
   function startEdit() {
@@ -169,19 +180,19 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
         )}
         {note.isListItem && (
           <button className={`checkbox ${note.checked ? 'on' : ''}`} onClick={() => store.setChecked(note, !note.checked)} aria-label="İşaretle">
-            {note.checked && <Check size={11} color="var(--on-ok)" />}
+            {note.checked && <Check size={14} color="var(--on-ok)" />}
           </button>
         )}
         <div className="note-main">
           <div className="note-top">
-            <button className="note-path link" onClick={() => onSelectPath(note.path)} title={note.path.join(' / ')}>
-              {note.path[note.path.length - 1]}
-              {note.encrypted && <Lock size={9} />}
+            <button className="note-path link" onClick={() => onSelectPath(note.path)} title={`${note.path.join(' / ')} klasörünü aç`}>
+              <span className="ellipsis">{note.path.join(' › ')}</span>
+              {note.encrypted && <Lock size={12} aria-label="şifreli" />}
             </button>
             <SharedMark note={note} />
             {meaningMatch && (
               <span className="meaning-tag" title="Aradığın kelimeler geçmiyor ama AI konuyu ilgili buldu">
-                <Sparkles size={10} /> anlamca ilgili
+                <Sparkles size={12} /> anlamca ilgili
               </span>
             )}
           </div>
@@ -244,11 +255,11 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
             {formatDate(note.createdAt)}
             {c.editedAt && <span title={`Son düzenleme: ${formatDate(c.editedAt)}`}>· düzenlendi {formatDate(c.editedAt)}</span>}
             {note.reminderAt && note.repeat ? (
-              <span className="c-reminder"><Clock size={10} /> {repeatLabel(new Date(note.reminderAt), note.repeat)}</span>
+              <span className="c-reminder"><Clock size={13} /> {repeatLabel(new Date(note.reminderAt), note.repeat)}</span>
             ) : note.reminderAt ? (
-              <span className="c-reminder"><Clock size={10} /> {formatDate(note.reminderAt)}</span>
+              <span className="c-reminder"><Clock size={13} /> {formatDate(note.reminderAt)}</span>
             ) : note.isReminder ? (
-              <span className="c-reminder"><Clock size={10} /> hatırlatma</span>
+              <span className="c-reminder"><Clock size={13} /> hatırlatma</span>
             ) : null}
           </div>
 
@@ -304,13 +315,29 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
         </div>
 
         {!editing && (
-          <div className="note-actions">
-            <button className="icon-btn hover-only" title="Okuma modu" onClick={onOpenReader}><BookOpen size={14} /></button>
-            <button className="icon-btn hover-only" title="Düzenle" onClick={startEdit}><Pencil size={14} /></button>
-            <button className="icon-btn hover-only" title="Taşı" onClick={() => setMoving((v) => !v)}><FolderInput size={14} /></button>
-            <button className="icon-btn hover-only" title="Yorum ekle" onClick={() => setCommenting((v) => !v)}><MessageCircle size={14} /></button>
-            <button className="icon-btn hover-only" title="Görsel ekle" onClick={() => fileRef.current?.click()}><ImagePlus size={14} /></button>
-            <button className="icon-btn hover-only danger" title="Sil" onClick={() => void askDelete()}><Trash2 size={14} /></button>
+          <div className="note-actions" ref={actionsRef}>
+            <button className="icon-btn act-wide" title="Düzenle" aria-label="Düzenle" onClick={startEdit}><Pencil size={17} /></button>
+            <button className="icon-btn act-wide" title="Taşı" aria-label="Taşı" onClick={() => setMoving((v) => !v)}><FolderInput size={17} /></button>
+            <button
+              className="icon-btn"
+              title="Diğer işlemler"
+              aria-label="Diğer işlemler"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((o) => !o)}
+            >
+              <MoreHorizontal size={18} />
+            </button>
+            {menuOpen && (
+              <div className="note-menu card" role="menu">
+                <button role="menuitem" className="menu-phone" onClick={() => { setMenuOpen(false); startEdit() }}><Pencil size={16} /> Düzenle</button>
+                <button role="menuitem" className="menu-phone" onClick={() => { setMenuOpen(false); setMoving(true) }}><FolderInput size={16} /> Taşı</button>
+                <button role="menuitem" onClick={() => { setMenuOpen(false); onOpenReader() }}><BookOpen size={16} /> Okuma modunda aç</button>
+                <button role="menuitem" onClick={() => { setMenuOpen(false); setCommenting(true) }}><MessageCircle size={16} /> Yorum ekle</button>
+                <button role="menuitem" onClick={() => { setMenuOpen(false); fileRef.current?.click() }}><ImagePlus size={16} /> Görsel ekle</button>
+                <button role="menuitem" className="danger" onClick={() => { setMenuOpen(false); void askDelete() }}><Trash2 size={16} /> Sil</button>
+              </div>
+            )}
             <input
               ref={fileRef}
               type="file"

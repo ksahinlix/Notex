@@ -52,6 +52,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D17 | Dark mode through CSS variables; Sistem/Açık/Koyu remembered per browser | Active |
 | D18 | Folders can be shared with other people by e-mail invite; everyone invited may edit | Active |
 | D19 | Someone who accepted a folder from you is not asked again for the next one | Active |
+| D20 | New look: warm "paper and ink" theme, full-height sidebar on computers, tab bar + full-screen composer on phones | Active |
 
 ### D1 — Start from scratch
 - **What:** New repository structure. `docs/prototype.jsx` is kept only as a
@@ -460,6 +461,35 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   accepts: that still holds for the **first** folder from a given person.
 - **Revisit when:** someone wants to be asked every time, or to block a person
   entirely (today they can only leave each folder).
+
+### D20 — A new look, and nothing hidden
+- **Decision:** a warm "paper and ink" palette (ground `#f5f3ee`, ink
+  `#1c1b18`, the indigo accent kept), Fraunces for headings and Instrument
+  Sans for text (Google Fonts; Georgia / system font when offline), and a
+  new frame:
+  - **Computers:** a full-height sidebar with the logo, **Yeni not**,
+    Notlar / Hatırlatmalar (with an "N gecikmiş" badge), the folder tree and
+    the account buttons. The page shows the open folder as a big title, and
+    the composer sits in the page as one dashed line until you click it.
+  - **Phones:** a small header, a bottom tab bar (Notlar · Klasörler ·
+    Hatırlatmalar), a **Not yaz** button, the folders as a sheet from the
+    bottom, and the composer full screen while writing (**Kapat** keeps the
+    draft).
+- **Why:** the owner found the old UI plain, small (10–11 px text), hard to
+  discover (actions only on hover) and cramped on a phone. Designed first on a
+  canvas, then applied here.
+- **Rules that came with it:**
+  - No text below 12 px; note text 15 px; touch targets 44 px.
+  - Main actions never hide: a note shows Düzenle, Taşı and ⋯ (okuma modu,
+    yorum, görsel, sil); a folder always shows its ⋯, which now also has
+    Şifreyle koru / Kilitle. Only the drag handle and a folder's extra lock
+    button stay hover-only.
+  - Locked notes are one card per locked folder ("3 kilitli not"), and search
+    says which locked folders it skipped, with a button to unlock.
+  - Search results are two groups: word matches, then "Anlamca ilgili" in its
+    own tinted box.
+- **Revisit when:** the fonts should work offline too (bundle them with the
+  app instead of Google Fonts).
 
 ---
 
@@ -1297,3 +1327,43 @@ acceptance and can still be left; contacts list people who accepted, once each,
 and never someone who didn't) and 145 web tests, lint, build. Browser test,
 19 checks, including the dialog offering Irmak, her joining with no invitation
 and dropping off the offer row.
+
+### 2026-09-25 — New look (D20, v1.4.0)
+**What:**
+- Colors, fonts and sizes in `index.css` (tokens at the top, dark values
+  alongside). New frame in `NotesPage.tsx`: sidebar on computers; header, tab
+  bar, **Not yaz** and a folder sheet on phones (`useIsPhone.ts` shares the
+  680 px breakpoint with the CSS).
+- `Composer.tsx`: in the page instead of a fixed bottom bar; folds back to one
+  line when left empty; full screen on phones with Kapat / Kaydet; the AI
+  folder chips come right under the text as "Nereye kaydedelim?"; the version
+  moved to the foot of the page.
+- `NoteCard.tsx`: full folder path, Düzenle / Taşı / ⋯ always visible (on
+  phones only ⋯, which then also holds Düzenle and Taşı).
+- `LockedCard.tsx`: one card per locked folder, in the list and in search.
+- `Sidebar.tsx`: "Tüm notlar", "Kilitli" pill, ⋯ always visible, lock item in
+  the ⋯ menu. `PasswordModal.tsx`: folder name as the title, a labelled field
+  with show/hide, a bottom sheet on phones. New sign-in screen in `App.tsx`.
+- Search: results in two groups, a card for skipped locked folders, "/"
+  focuses the box, Esc clears it.
+- Reminder counts ("4 aktif", the strip's "Tümü (4)") count reminders, not
+  occurrences: a monthly bill is one reminder, not six.
+- The tour finds whichever copy of a target is on screen (the Hatırlatmalar
+  button exists in the sidebar and in the tab bar); on phones it points at
+  **Not yaz** and the Klasörler tab, and on computers it unfolds the composer
+  while it runs so its buttons can be shown.
+
+**How verified:** the npm registry was not reachable from the cloud session
+that made this change, so `npm test`, `npm run lint` and `npm run build`
+still need a run on a machine with the dependencies installed. The app was
+bundled with esbuild (icons stubbed) and checked in Chromium against a mocked
+API at 1440×960 and 390×844, light and dark: 33 checks passed (folded
+composer opens and folds back, Ctrl+Enter saves into the open folder, "/" and
+Esc, two result groups, one locked card for three notes, ⋯ menus open and
+close, the password sheet, the phone sheet closes when a folder is picked, the
+phone composer keeps its draft after Kapat and closes after Kaydet, no
+horizontal scroll), and the guided tour walked through on both layouts
+(10 steps on a computer, 7 on a phone), with no console errors.
+
+**Next:** run the checks above locally, then deploy. Maybe bundle the fonts.
+
