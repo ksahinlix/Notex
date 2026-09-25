@@ -11,6 +11,7 @@ import { confirmDialog } from '../state/confirm'
 import { store } from '../state/store'
 import MoveMenu from './MoveMenu'
 import NoteBody from './NoteBody'
+import SharedMark from './SharedMark'
 import ReminderPicker, { type ReminderChoice } from './ReminderPicker'
 import RichEditor, { type RichEditorHandle } from './RichEditor'
 
@@ -177,6 +178,7 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
               {note.path[note.path.length - 1]}
               {note.encrypted && <Lock size={9} />}
             </button>
+            <SharedMark note={note} />
             {meaningMatch && (
               <span className="meaning-tag" title="Aradığın kelimeler geçmiyor ama AI konuyu ilgili buldu">
                 <Sparkles size={10} /> anlamca ilgili

@@ -1227,3 +1227,30 @@ mobile audit above, and the existing dark-mode (16) and reminders (18) suites.
 
 **Next:** push notifications — service worker push handler, VAPID keys,
 subscriptions per device, `/api/reminders/due`, and a free external cron.
+
+### 2026-09-25 — Writing into the open folder, and a mark on shared notes (v1.2.0)
+**Asked for:** a way to add a note to the folder you are looking at, without
+the AI guessing a folder you have already chosen; and a visible sign, with the
+people behind it, on notes and reminders other people can see.
+
+**What:**
+- **"Bu klasöre not ekle"** appears beside the folder name above the list as
+  soon as a folder (yours or a shared one) is open, and in the folder's ⋯
+  menu. It puts the cursor in the composer with the folder already filled in.
+  The AI was already skipped for a chosen folder — `pathSource` becomes
+  `'selection'` — so this only adds the way in, which is what was missing.
+  A tiny event (`state/composer.ts`) carries the request, instead of threading
+  a ref through three components.
+- **A 👥 mark** on every note others can see: on the card beside the folder
+  name, in the "Yaklaşan" strip, and on the reminders page. Its tooltip says
+  who — "Ayşe ile paylaşıldı (1 bekliyor)" for your folders, "Kaan ile
+  paylaşılan klasörde" for one shared with you. The text comes from
+  `shareMark` in `lib/sharing.ts`, so it is unit-tested rather than assembled
+  in the components.
+
+**How verified:** 145 web tests (4 new for `shareMark`), lint, build, and a
+browser test with 17 checks — a private note has no mark while a shared one
+names Ayşe, the strip and reminders page mark both your own shared reminders
+and Kaan's, the button appears only with a folder open, puts the cursor in the
+composer with the path filled, saves into that folder rather than one the AI
+picked, works from the ⋯ menu, and is reachable on a phone.

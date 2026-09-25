@@ -3,6 +3,7 @@ import { ArrowRight, Check, Clock } from 'lucide-react'
 import { buildAgenda, stripItems } from '../lib/agenda'
 import type { Note, NoteContent } from '../lib/types'
 import { store } from '../state/store'
+import SharedMark from './SharedMark'
 
 interface Props {
   notes: Note[]
@@ -43,6 +44,7 @@ export default function UpcomingStrip({ notes, contentOf, onShowAll }: Props) {
               {at ? at.toLocaleString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Tarihsiz'}
             </span>
             <span className="reminder-text">{c ? c.reminderLabel || c.text : '(kilitli not)'}</span>
+            <SharedMark note={note} />
           </div>
         )
       })}

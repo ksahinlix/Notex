@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlarmClock, CircleHelp, Loader2, LogOut, NotebookPen, Search, Sparkles, X } from 'lucide-react'
+import { AlarmClock, CircleHelp, Loader2, LogOut, NotebookPen, Plus, Search, Sparkles, X } from 'lucide-react'
 import { clearSearchCache, useSemanticSearch } from '../ai/useAi'
 import { isReminderNote } from '../lib/agenda'
 import { queryTerms } from '../lib/highlight'
@@ -11,6 +11,7 @@ import { allPaths, buildTree, findProtectedAncestor, pathKeyOf, pathStartsWith }
 import type { User } from '../lib/api'
 import type { Note } from '../lib/types'
 import { store, useNotex } from '../state/store'
+import { focusComposer } from '../state/composer'
 import { showToast } from '../state/toast'
 import Composer from './Composer'
 import { ConfirmHost } from './ConfirmDialog'
@@ -296,7 +297,14 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
             {searching ? (
               selectedPath && <div className="crumb muted">Tüm notlarda aranıyor (seçili klasör: {selectedPath.join(' / ')})</div>
             ) : (
-              selectedPath && <div className="crumb">{selectedPath.join(' / ')}</div>
+              (selectedPath || sharedPick) && (
+                <div className="crumb">
+                  <span className="ellipsis">{(sharedPick ?? { path: selectedPath! }).path.join(' / ')}</span>
+                  <button className="btn btn-ghost add-here" onClick={focusComposer}>
+                    <Plus size={13} /> Bu klasöre not ekle
+                  </button>
+                </div>
+              )
             )}
             {query.trim().length >= 2 && (
               <div className="search-note" data-state={semantic.loading ? 'loading' : semantic.ids ? 'done' : 'off'}>

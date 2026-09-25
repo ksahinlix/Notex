@@ -900,6 +900,8 @@ lives in one file, `server/src/shares.js`:
   in `author_id`, so it stays with the folder if sharing ends, and counts
   against the owner's 50 MB.
 
+Every note other people can see carries a 👥 mark (`SharedMark.tsx`, text from `shareMark` in `lib/sharing.ts`) on the card, in the "Yaklaşan" strip and on the reminders page. Hovering it says who: the people you shared the folder with, or whose folder it came from.
+
 Because you and a friend may both have an "Alışveriş", the request says whose
 folder is meant (`ownerId`), and shared folders are listed apart under
 **"Paylaşılan"** with the owner's name instead of being merged into your tree.

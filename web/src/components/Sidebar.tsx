@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, FolderInput, Lock, LockOpen, MoreHorizontal, Pencil, Users } from 'lucide-react'
+import { ChevronDown, ChevronRight, FolderInput, Lock, LockOpen, MoreHorizontal, Pencil, Plus, Users } from 'lucide-react'
 import { pathKeyOf, pathStartsWith, type TreeNode } from '../lib/tree'
 import { sharesForPath, shareSummary } from '../lib/sharing'
 import type { ProtectedFolder, Share } from '../lib/types'
+import { focusComposer } from '../state/composer'
 import ShareModal from './ShareModal'
 import MoveMenu from './MoveMenu'
 
@@ -207,6 +208,15 @@ function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path:
 
       {menu === 'menu' && (
         <div className="folder-menu card" onMouseLeave={() => setMenu(null)}>
+          <button
+            onClick={() => {
+              setMenu(null)
+              onSelect(path) // the composer takes its folder from the selection
+              focusComposer()
+            }}
+          >
+            <Plus size={12} /> Bu klasöre not ekle
+          </button>
           <button
             onClick={() => {
               setNewName(name)

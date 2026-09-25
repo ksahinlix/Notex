@@ -11,6 +11,7 @@ import ReminderPicker from './ReminderPicker'
 import ShareModal from './ShareModal'
 import NoteCard from './NoteCard'
 import TreeToggle from './TreeToggle'
+import SharedMark from './SharedMark'
 
 interface Props {
   notes: Note[]
@@ -136,6 +137,7 @@ export default function RemindersPage({ notes, contentOf, onOpenReader, pathOpti
             >
               {note.path.join(' / ')}
             </button>
+            <SharedMark note={note} />
           </div>
           {editing === key && (
             <div className="picker-anchor agenda-picker">
