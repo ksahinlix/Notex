@@ -74,8 +74,17 @@ export class NotexStore {
 
   async load(userId?: string) {
     try {
-      const [n, f, s] = await Promise.all([api.listNotes(), api.listProtectedFolders(), api.listShares()])
-      this.set({ notes: n.notes.sort(byNewest), folders: f.folders, shares: s.mine, sharedWithMe: s.withMe, userId: userId ?? this.state.userId, loaded: true, syncError: '' })
+      // Sharing must never keep your own notes off the screen: if that call
+      // fails, the app still opens with what belongs to you.
+      const shares = api.listShares().catch(() => null)
+      const [n, f] = await Promise.all([api.listNotes(), api.listProtectedFolders()])
+      const s = await shares
+      this.set({
+        notes: n.notes.sort(byNewest), folders: f.folders,
+        shares: s?.mine ?? [], sharedWithMe: s?.withMe ?? [],
+        userId: userId ?? this.state.userId, loaded: true,
+        syncError: s ? '' : 'Paylaşımlar yüklenemedi; kendi notların açık.',
+      })
     } catch {
       this.set({ loaded: true, syncError: 'Notlar yüklenemedi. Sayfayı yenilemeyi dene.' })
     }

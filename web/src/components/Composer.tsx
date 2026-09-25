@@ -40,6 +40,8 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
   const [imagesLoading, setImagesLoading] = useState(false)
   const [editorKey, setEditorKey] = useState(0)
   const [expanded, setExpanded] = useState(false)
+  /** Phones: the bar is one line until you start writing (see .composer-bar.open). */
+  const [open, setOpen] = useState(false)
   const [path, setPath] = useState('')
   const [pathSource, setPathSource] = useState<PathSource>('ai')
   const [isListItem, setIsListItem] = useState(false)
@@ -89,6 +91,7 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
     setManualReminder({ at: null })
     setPickerOpen(false)
     setExpanded(false)
+    setOpen(false)
     if (!selectedPath) {
       setPath('')
       setPathSource('ai')
@@ -124,7 +127,11 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
   }
 
   return (
-    <div className={`composer-bar ${expanded ? 'expanded' : ''}`} onKeyDown={(e) => e.key === 'Escape' && expanded && setExpanded(false)}>
+    <div
+      className={`composer-bar ${expanded ? 'expanded' : ''} ${open || !empty || expanded ? 'open' : ''}`}
+      onFocusCapture={() => setOpen(true)}
+      onKeyDown={(e) => e.key === 'Escape' && expanded && setExpanded(false)}
+    >
       <div className="composer card" data-tour="composer">
         <RichEditor
           key={editorKey}

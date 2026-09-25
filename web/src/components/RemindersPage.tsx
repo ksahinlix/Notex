@@ -10,6 +10,7 @@ import { store, useNotex } from '../state/store'
 import ReminderPicker from './ReminderPicker'
 import ShareModal from './ShareModal'
 import NoteCard from './NoteCard'
+import TreeToggle from './TreeToggle'
 
 interface Props {
   notes: Note[]
@@ -39,6 +40,7 @@ export default function RemindersPage({ notes, contentOf, onOpenReader, pathOpti
   const [editingNote, setEditingNote] = useState<string | null>(null) // note being edited in place
   const [folderMenu, setFolderMenu] = useState<string | null>(null) // category key whose ⋯ menu is open
   const [renaming, setRenaming] = useState<{ key: string; name: string } | null>(null)
+  const [treeOpen, setTreeOpen] = useState(false)
   const state = useNotex()
 
   const reminders = useMemo(() => notes.filter(isReminderNote), [notes])
@@ -173,7 +175,13 @@ export default function RemindersPage({ notes, contentOf, onOpenReader, pathOpti
   const empty = !agenda.overdue.length && !agenda.months.length && !agenda.undated.length
   return (
     <div className="layout" onClick={() => folderMenu && setFolderMenu(null)}>
-      <div className="sidebar-wrap">
+      <div className={`sidebar-wrap ${treeOpen ? 'open' : ''}`}>
+        <TreeToggle
+          open={treeOpen}
+          label={picked ? picked.label : 'Tüm klasörler'}
+          count={inCategory.filter((n) => !n.checked).length}
+          onToggle={() => setTreeOpen((o) => !o)}
+        />
         <nav className="sidebar card">
           <div className={`tree-row tree-all ${!category ? 'selected' : ''}`} onClick={() => setCategory(null)}>
             Tümü <span className="count">{categories.reduce((a, c) => a + c.count, 0)}</span>
@@ -185,7 +193,7 @@ export default function RemindersPage({ notes, contentOf, onOpenReader, pathOpti
             const shared = sharesForPath(state.shares, c.path)
             return (
               <div key={c.key}>
-              <div className={`tree-row ${category === c.key ? 'selected' : ''}`} style={{ paddingLeft: 12 }} onClick={() => setCategory(c.key)}>
+              <div className={`tree-row ${category === c.key ? 'selected' : ''}`} style={{ paddingLeft: 12 }} onClick={() => { setCategory(c.key); setTreeOpen(false) }}>
                 {renaming?.key === c.key ? (
                   <input
                     className="rename-input"

@@ -43,6 +43,9 @@ New decisions go in the Decisions table and get their own section. Update
     (pasted HTML -> text/image blocks).
   - `src/components/`: UI (NotesPage, Sidebar, NoteCard, Composer, RichEditor,
     PasswordModal, Lightbox, Reminders).
+- The web app is installable (PWA): `web/public/manifest.webmanifest` and
+  `public/sw.js`. The service worker never caches `/api/**`; `/assets/**` is
+  content-hashed so it is cache-first, everything else network-first.
 - UI changes: check them in a real browser (Playwright with Chromium at
   `/opt/pw-browsers/chromium` in cloud sessions) on desktop and at phone width.
 - `docs/prototype.jsx`: the original prototype, a design reference only. Don't

@@ -1184,3 +1184,46 @@ good". Two real faults behind it:
 eye — the menu opens below the row, its items fit on one line, the rename box
 doesn't change the row's height, and the name is preselected. 18 checks in
 all; 138 web tests, lint and build pass.
+
+### 2026-09-25 — Installable app and a phone-sized layout (v1.1.0)
+**Why:** the app worked on a phone but was cramped, and iOS only delivers web
+push to apps installed on the home screen — so this is also step one towards
+reminder notifications. Measured on an emulated Pixel 7 before and after
+rather than judged by eye.
+
+| | before | after |
+|---|---|---|
+| composer bar | 246 px (29% of the screen) | 106 px (13%) |
+| tap targets under 40 px | 35, smallest 18 px | 24, smallest 32 px |
+| agenda actions (5 buttons) | 108 px | 178 px |
+
+**What:**
+- **Installable (PWA):** `manifest.webmanifest` (standalone, Turkish name,
+  192/512/maskable icons rendered from the favicon), apple-touch-icon and iOS
+  meta tags, light and dark `theme-color`, and `public/sw.js` — an offline
+  shell that **never** caches `/api/**`, serves content-hashed `/assets/**`
+  cache-first and everything else network-first, so a deploy is picked up on
+  the next load.
+- **The composer is one line until you write in it** on phones; it opens on
+  focus and folds back after saving. This is what gave the list its space
+  back.
+- **The folder tree folds away** behind a button that names the selected
+  folder ("Tüm klasörler 2"); picking a folder closes it again. Both pages.
+- **Touch targets** grow under `@media (pointer: coarse)` — icon buttons from
+  18 to 34 px, list rows and checkboxes too — with the mouse layout untouched.
+
+**Two faults found while testing, both fixed:**
+- The fold-away button never appeared: its base `display: none` sat *after*
+  the phone media query, so it always won. Moved above it.
+- The old dark-mode browser test failed at the first step, which turned out to
+  be the app's fault, not the test's: `load()` fetched notes, folders and
+  shares together, so a failing `/api/shares` left the user with **no notes at
+  all**. Sharing is now loaded separately and its failure only shows a notice.
+
+**How verified:** 141 web tests (3 new for `load`), lint, build. A new PWA
+browser check (11 assertions: manifest, every icon served, the service worker
+reaching *activated*, and the shell still opening with the network off), the
+mobile audit above, and the existing dark-mode (16) and reminders (18) suites.
+
+**Next:** push notifications — service worker push handler, VAPID keys,
+subscriptions per device, `/api/reminders/due`, and a free external cron.
