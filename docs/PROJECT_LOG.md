@@ -1450,3 +1450,34 @@ including that the name is hidden until hover and then appears at once.
 Note: the new look (D20 above) was designed against the state before this
 entry, so the narrow-phone fixes here were re-checked against the new frame
 rather than carried over — `.topbar` and `.view-tabs` no longer exist.
+
+### 2026-09-26 — The fonts are ours now (v1.5.1)
+**Why:** the new look loaded Fraunces and Instrument Sans from Google's CDN on
+every visit — two extra connections, Google seeing every visitor's IP, and
+system fallbacks whenever the network is poor. The redesign's own entry left
+this open.
+
+**What:** `scripts/fetch-fonts.mjs` downloads them once and writes
+`src/fonts.css`; `public/fonts/` holds the files and `index.html` preloads the
+two the first screen needs. Only **latin + latin-ext** are bundled — that
+covers Turkish (ğ ş ı ö ü ç) — and Fraunces only at **600**, the sole weight
+the headings use. Dropping its 500 halved that family: **204 kB in total**,
+served from our own origin.
+
+The service worker precaches all eight files (cache `notex-shell-v2`): the
+ones in `<head>` are requested before the worker is running, so on first use
+they would otherwise be missing exactly when the network is.
+
+**How verified:** a browser check with seven assertions — **nothing at all is
+fetched from another host**, both families load, the page title really uses
+Fraunces, and Turkish letters resolve from the bundled subsets (the check
+forces the latin-ext face to load first; without that it reports a false
+negative, since a subset stays unloaded until something needs it). Then
+offline on a return visit: the app renders and keeps Fraunces. 150 web tests,
+lint and build pass, and the browser suites are unchanged: new frame 37, PWA
+11, overlays at 360 px 31.
+
+**Worth knowing:** the app bundle is only cached once the worker is running,
+so the very first visit is still online-only; from the second visit on it
+works offline. That is why the offline check reloads once before pulling the
+plug.
