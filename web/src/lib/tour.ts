@@ -37,7 +37,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     target: 'tree',
     title: 'Klasörlerin',
-    body: 'Klasöre tıklayınca yalnızca o klasörün notları görünür. Notları ⋮⋮ tutamacından sürükleyip bir klasöre bırak; not kendi klasör adını korur (ör. Yazılım / LSA). Klasörün ⋯ menüsünden yeniden adlandırabilir ya da taşıyabilir, 🔒 ile şifreleyebilirsin.',
+    body: 'Klasöre tıklayınca yalnızca o klasörün notları görünür. Notları ⋮⋮ tutamacından sürükleyip bir klasöre bırak; not kendi klasör adını korur (ör. Yazılım / LSA). Klasörün ⋯ menüsünden yeniden adlandırabilir, taşıyabilir, paylaşabilir ya da şifreleyebilirsin.',
   },
   {
     target: 'search',
@@ -47,7 +47,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     target: 'note',
     title: 'Not düğmeleri',
-    body: '📖 okuma modu (büyük yazı, ← → ile notlar arasında gezinme), ✏️ düzenle, 📁 taşı, 💬 yorum, 🖼 görsel ekle, 🗑 sil.',
+    body: '✏️ düzenle ve 📁 taşı her notta görünür. ⋯ menüsünde okuma modu (büyük yazı, ← → ile notlar arasında gezinme), yorum, görsel ekleme ve silme var.',
   },
   {
     target: 'reminders-tab',

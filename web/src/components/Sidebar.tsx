@@ -82,10 +82,10 @@ export default function Sidebar({ tree, selectedPath, onSelect, ...rest }: Props
   return (
     <nav className="sidebar card">
       <div className={`tree-row tree-all ${!selectedPath ? 'selected' : ''} ${root.over ? 'drag-over' : ''}`} onClick={() => onSelect(null)} {...root.handlers}>
-        Tümü <span className="count">{tree.count}</span>
+        Tüm notlar <span className="count">{tree.count}</span>
       </div>
       {names.length === 0 ? (
-        <div className="muted" style={{ padding: '6px 8px' }}>Henüz kategori yok</div>
+        <div className="muted" style={{ padding: '6px 10px' }}>Henüz klasör yok. İlk notunu yazınca AI oluşturur.</div>
       ) : (
         names.map((name) => (
           <Node key={name} name={name} node={tree.children[name]} path={[name]} depth={0} selectedPath={selectedPath} onSelect={onSelect} {...rest} />
@@ -151,7 +151,7 @@ function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path:
     <div ref={nodeRef}>
       <div
         className={`tree-row ${isSelected ? 'selected' : ''} ${drop.over ? 'drag-over' : ''}`}
-        style={{ paddingLeft: 8 + depth * 14 }}
+        style={{ paddingLeft: 6 + depth * 18 }}
         {...drop.handlers}
       >
         {menu === 'rename' ? (
@@ -185,25 +185,30 @@ function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path:
               if (children.length) setOpen((o) => (isSelected ? !o : true))
             }}
           >
-            {isLocked ? <Lock size={11} className="c-reminder" /> : children.length ? (expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />) : <span style={{ width: 12 }} />}
+            {!isLocked && children.length ? (expanded ? <ChevronDown size={16} className="c-muted" /> : <ChevronRight size={16} className="c-muted" />) : <span style={{ width: 16, flex: 'none' }} />}
             <span className="ellipsis">{name}</span>
-            {shared.length > 0 && <Users size={10} className="shared-badge" />}
+            {shared.length > 0 && <Users size={13} className="shared-badge" aria-label="paylaşılıyor" />}
           </span>
         )}
         {menu !== 'rename' && (
-          <button className="icon-btn hover-only" title="Klasör işlemleri" aria-label="Klasör işlemleri" onClick={() => setMenu(menu ? null : 'menu')}>
-            <MoreHorizontal size={13} />
+          <button className="icon-btn" title="Klasör işlemleri" aria-label={`${name} klasörü işlemleri`} aria-expanded={menu === 'menu'} onClick={() => setMenu(menu ? null : 'menu')}>
+            <MoreHorizontal size={16} />
           </button>
         )}
-        <button
-          className={`icon-btn ${isProtected ? '' : 'hover-only'}`}
-          title={isProtected ? (isUnlocked ? 'Kilitle' : 'Kilidi aç') : 'Bu klasörü şifreyle koru'}
-          onClick={() => onLockClick(path)}
-          style={{ color: isProtected ? (isUnlocked ? 'var(--ok)' : 'var(--reminder)') : undefined }}
-        >
-          {isUnlocked ? <LockOpen size={12} /> : <Lock size={12} />}
-        </button>
-        {!isLocked && <span className="count">{node.count}</span>}
+        {isLocked ? (
+          <button className="lock-pill link" title="Kilidi aç" onClick={() => onLockClick(path)}>
+            <Lock size={12} /> Kilitli
+          </button>
+        ) : (
+          <>
+            {isUnlocked && (
+              <button className="icon-btn" title="Kilitle" aria-label="Kilitle" onClick={() => onLockClick(path)} style={{ color: 'var(--ok)' }}>
+                <LockOpen size={15} />
+              </button>
+            )}
+            <span className="count">{node.count}</span>
+          </>
+        )}
       </div>
 
       {menu === 'menu' && (
@@ -226,6 +231,15 @@ function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path:
             <Pencil size={12} /> Yeniden adlandır
           </button>
           <button onClick={() => setMenu('move')}><FolderInput size={12} /> Taşı…</button>
+          <button
+            onClick={() => {
+              setMenu(null)
+              onLockClick(path)
+            }}
+          >
+            {isUnlocked ? <Lock size={12} /> : isProtected ? <LockOpen size={12} /> : <Lock size={12} />}
+            {isUnlocked ? 'Kilitle' : isProtected ? 'Kilidi aç' : 'Şifreyle koru…'}
+          </button>
           <button
             onClick={() => setMenu(isProtected ? null : 'share')}
             disabled={isProtected}

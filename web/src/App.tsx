@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { FolderClosed, Lock, Sparkles } from 'lucide-react'
 import { clearAiCaches } from './ai/useAi'
 import NotesPage from './components/NotesPage'
 import { api, ApiError, UNAUTHORIZED_EVENT, type User } from './lib/api'
@@ -70,7 +71,7 @@ function Login({ onSuccess }: { onSuccess: (user: User) => void }) {
             }
           },
         })
-        gis.renderButton(buttonRef.current, { theme: isDark() ? 'filled_black' : 'outline', size: 'large', text: 'signin_with', shape: 'pill', locale: 'tr', width: 260 })
+        gis.renderButton(buttonRef.current, { theme: isDark() ? 'filled_black' : 'outline', size: 'large', text: 'signin_with', shape: 'pill', locale: 'tr', width: 320 })
       } catch {
         if (!cancelled) setError('Google girişi yüklenemedi. İnternet bağlantını kontrol et.')
       }
@@ -83,13 +84,24 @@ function Login({ onSuccess }: { onSuccess: (user: User) => void }) {
   }, [])
 
   return (
-    <main className="center">
-      <div className="card login">
-        <h1>Notex</h1>
-        <p className="muted login-text">Notlarını yaz; yapay zekâ onları klasörlere ayırsın.</p>
-        <div ref={buttonRef} className="google-button" />
-        {busy && <div className="muted">Giriş yapılıyor...</div>}
-        {error && <div className="error">{error}</div>}
+    <main className="login-page">
+      <div className="login">
+        <div className="login-hero">
+          <span className="logo" aria-hidden="true">N</span>
+          <h1>Notex</h1>
+          <p className="login-text">Notlarını yaz; yapay zekâ onları klasörlere ayırsın.</p>
+        </div>
+        <ul className="login-features">
+          <li><span><FolderClosed size={20} /></span>Her not için klasör önerisi</li>
+          <li><span><Sparkles size={20} /></span>Kelimeyle değil, anlamla arama</li>
+          <li><span><Lock size={20} /></span>Şifreli klasörler: anahtar sadece sende</li>
+        </ul>
+        <div className="login-foot">
+          <div ref={buttonRef} className="google-button" />
+          {busy && <div className="muted" style={{ textAlign: 'center' }}>Giriş yapılıyor...</div>}
+          {error && <div className="error" style={{ textAlign: 'center' }}>{error}</div>}
+          <p className="login-note">Kilitli klasörlerin şifresi sunucuya hiç gönderilmez.</p>
+        </div>
       </div>
     </main>
   )

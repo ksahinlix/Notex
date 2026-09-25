@@ -482,7 +482,7 @@ Browser: Google button → ID token ──POST /api/auth/google──▶ Server:
 | **localStorage** | reader text size, "tour done", theme | small per-browser preferences |
 | **CSS variables + `prefers-color-scheme`** | `index.css`, `lib/theme.ts` | dark mode that follows the device or the user's choice |
 | **URL hash** | `#hatirlatmalar` | the Reminders page survives reload |
-| **Build-time constant** (`define`) | `lib/version.ts` | the version under the composer, compared with the server |
+| **Build-time constant** (`define`) | `lib/version.ts` | the version at the foot of the page, compared with the server |
 | **Web app manifest + service worker** | `public/manifest.webmanifest`, `public/sw.js` | install to the home screen, and an offline app shell |
 | **`pointer: coarse` media query** | `index.css` | bigger buttons on touch screens, unchanged with a mouse |
 
@@ -860,7 +860,7 @@ the strip (and its "Tümü" link) never disappears while reminders exist.
   dropped on "Yazılım" → "Yazılım / LSA". The toast offers **"Sadece Yazılım
   içine koy"** and **Geri al**. A path you *type* in Taşı is used exactly.
 - **Rule 2 — folders move whole.** Drag a folder's name, drop on another
-  folder or on "Tümü" (top level), or use **⋯ → Yeniden adlandır / Taşı…**.
+  folder or on "Tüm notlar" (top level), or use **⋯ → Yeniden adlandır / Taşı…**.
   `moveFolder` plans every note:
   - no lock change, or the locked folder moves along → only the `path` changes
     (encrypted notes keep their cipher — the key doesn't depend on the path);
@@ -921,6 +921,12 @@ it there), and **everyone invited may edit** — there is no read-only role yet.
 
 ### 6.11 Smaller features
 
+- **Layout** (D20, `NotesPage.tsx`, bottom of `index.css`): on computers a
+  full-height sidebar (logo, Yeni not, Notlar/Hatırlatmalar, folders, account)
+  beside the page; on phones (≤ 680 px) a header, a bottom tab bar, a
+  **Not yaz** button, the sidebar's folder part as a sheet, and the composer
+  full screen. `components/useIsPhone.ts` tells components which layout is on
+  screen; keep its breakpoint equal to the CSS one.
 - **Reading mode** (`Reader.tsx`): a 760 px serif "page", A−/A+ (remembered),
   ← → between notes, Esc.
 - **Guided tour** (`Tour.tsx`, `lib/tour.ts`): dims the page, highlights
