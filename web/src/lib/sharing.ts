@@ -83,10 +83,26 @@ export function nameList(names: string[]): string {
 }
 
 /** Turkish summary of who a folder is shared with, for the sidebar tooltip. */
+/**
+ * One share per person. A note in a shared subfolder matches that folder's
+ * share *and* its parent's, so the same person would otherwise be drawn and
+ * named twice; an accepted share wins over an invitation still waiting.
+ */
+export function byPerson(shares: Share[]): Share[] {
+  const best = new Map<string, Share>()
+  for (const s of shares) {
+    const key = s.invitedEmail.trim().toLowerCase()
+    const had = best.get(key)
+    if (!had || (had.status !== 'accepted' && s.status === 'accepted')) best.set(key, s)
+  }
+  return [...best.values()]
+}
+
 export function shareSummary(shares: Share[]): string {
-  if (!shares.length) return ''
-  const names = nameList(shares.map((s) => personName(s.person ?? { name: null, email: s.invitedEmail })))
-  const waiting = shares.filter((s) => s.status === 'pending').length
+  const people = byPerson(shares)
+  if (!people.length) return ''
+  const names = nameList(people.map((s) => personName(s.person ?? { name: null, email: s.invitedEmail })))
+  const waiting = people.filter((s) => s.status === 'pending').length
   return `${names} ile paylaşıldı${waiting ? ` · ${waiting} davet bekliyor` : ''}`
 }
 
@@ -132,7 +148,7 @@ export interface SharePeople {
 export function sharePeople(note: Note, mine: Share[], withMe: Share[], userId: string | null): SharePeople | null {
   const from = shareOf(note, withMe, userId)
   if (from?.owner) return { people: [from.owner], label: `${personName(from.owner)} paylaştı`, theirs: true }
-  const here = sharesForPath(mine, note.path)
+  const here = byPerson(sharesForPath(mine, note.path))
   if (!here.length) return null
   const people = here.map((sh) => sh.person ?? { id: null, name: null, email: sh.invitedEmail, picture: null })
   return { people, label: shareSummary(here), theirs: false }

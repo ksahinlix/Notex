@@ -1506,3 +1506,29 @@ its backdrop and asserts nothing else is on top — it failed before the change
 the same check for the note ⋯ and Taşı menus, which were already fine. 150
 web tests, and the suites unchanged: new frame 37, sharing 14, fonts 7,
 overlays at 360 px 31.
+
+### 2026-09-26 — The same person shown twice on a shared note (v1.5.3)
+**Reported:** a folder was shared, then the folder above it with the same
+person; the reminder then carried **two identical faces**.
+
+**The cause:** `sharesForPath` returns every share whose folder is a prefix of
+the note's path — which is right, that is how a subfolder inherits sharing —
+but `sharePeople` and `shareSummary` then treated each share as a person. With
+"Ev" and "Ev / Alışveriş" both shared with Irmak, a note inside got two faces
+and the label read "irmak ve Irmak ile paylaşıldı".
+
+**The fix:** `byPerson` keeps one share per invited address (case-insensitive,
+since the same person can be invited as `Irmak@…` once and `irmak@…` the
+next), preferring an accepted share over one still waiting — so a folder you
+have already joined is not also counted as a pending invitation.
+
+**How verified:** four unit tests written first, all failing in the way that
+was reported (`['irmak@example.com', 'irmak@example.com']`, "irmak ve Irmak")
+and passing after; 154 web tests in total. A browser check then confirms one
+face and one name in all three places the mark appears — the "Yaklaşan"
+strip, the note card and the Hatırlatmalar page — with the parent invited as
+`Irmak@Example.com` and the subfolder as `irmak@example.com`.
+
+**Also corrected:** three of the older sharing tests gave two different people
+the *same* address, because the test factory defaults one. They only passed
+before because nothing deduplicated; each person now carries their own.
