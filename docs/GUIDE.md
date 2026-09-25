@@ -484,6 +484,7 @@ Browser: Google button → ID token ──POST /api/auth/google──▶ Server:
 | **URL hash** | `#hatirlatmalar` | the Reminders page survives reload |
 | **Build-time constant** (`define`) | `lib/version.ts` | the version at the foot of the page, compared with the server |
 | **Web app manifest + service worker** | `public/manifest.webmanifest`, `public/sw.js` | install to the home screen, and an offline app shell |
+| **Self-hosted `@font-face`** | `public/fonts/`, `src/fonts.css` | the two fonts without Google's CDN, and they work offline |
 | **`pointer: coarse` media query** | `index.css` | bigger buttons on touch screens, unchanged with a mouse |
 
 ---
