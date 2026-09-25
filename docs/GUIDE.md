@@ -881,6 +881,8 @@ The unit is a **folder**. Invite someone by e-mail from the folder's ⋯ menu;
 they get everything inside it, subfolders included, and may add, edit,
 complete and delete. Ticking a reminder off completes it for everyone.
 
+**Asked once (D19):** only the *first* folder you share with somebody is an invitation. After they accept, the next folder from you is simply there for them, and they appear in the Paylaş dialog as a one-tap choice. Leaving a share stays one click, for either side.
+
 **How an invite travels without an e-mail server:** the invite row names the
 invitee by address and carries a random token. The owner copies the link
 `/davet/<token>` and sends it themselves (WhatsApp, anything). Opening it

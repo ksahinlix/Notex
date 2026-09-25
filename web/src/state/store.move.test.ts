@@ -12,7 +12,7 @@ vi.mock('../lib/api', async (orig) => {
       ...mod.api,
       listNotes: vi.fn(),
       listProtectedFolders: vi.fn(),
-      listShares: vi.fn(async () => ({ mine: [], withMe: [] })),
+      listShares: vi.fn(async () => ({ mine: [], withMe: [], contacts: [] })),
       moveShares: vi.fn(async () => ({ moved: 0 })),
       saveNote: vi.fn(async (n: Note) => n),
       saveProtectedFolder: vi.fn(async (f: ProtectedFolder) => f),

@@ -60,6 +60,18 @@ export async function canWriteNote(pool, userId, note) {
   return (await writableOwner(pool, userId, note.path, note.user_id)) === note.user_id;
 }
 
+/** People who have already accepted a folder from this user (D19). */
+export async function listContacts(pool, userId) {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ON (lower(s.invited_email)) s.invited_email, s.invited_user_id, u.name, u.picture
+     FROM shares s LEFT JOIN users u ON u.id = s.invited_user_id
+     WHERE s.owner_id = $1 AND s.status = 'accepted'
+     ORDER BY lower(s.invited_email), s.accepted_at DESC NULLS LAST`,
+    [userId],
+  );
+  return rows.map((r) => ({ id: r.invited_user_id, email: r.invited_email, name: r.name ?? null, picture: r.picture ?? null }));
+}
+
 /** Shares the user made, and folders shared with them (accepted or waiting). */
 export async function listShares(pool, userId, userEmail) {
   const mine = await pool.query(
@@ -75,7 +87,7 @@ export async function listShares(pool, userId, userEmail) {
      ORDER BY s.created_at`,
     [userId, email(userEmail)],
   );
-  return { mine: mine.rows.map(toApiShare), withMe: withMe.rows.map(toApiShare) };
+  return { mine: mine.rows.map(toApiShare), withMe: withMe.rows.map(toApiShare), contacts: await listContacts(pool, userId) };
 }
 
 /** Refuses sharing a folder that is (or contains) a password-locked folder. */
@@ -89,14 +101,24 @@ export async function hasProtected(pool, userId, path) {
   return rows.length > 0;
 }
 
+/**
+ * Invites someone to a folder. Somebody who has already accepted a folder
+ * from this user is not asked again (D19): the new folder simply appears for
+ * them, and they can still leave it whenever they like.
+ */
 export async function createShare(pool, userId, path, invitedEmail) {
   const token = crypto.randomBytes(24).toString("hex");
+  const known = await pool.query(
+    "SELECT 1 FROM shares WHERE owner_id = $1 AND lower(invited_email) = $2 AND status = 'accepted' LIMIT 1",
+    [userId, email(invitedEmail)],
+  );
+  const status = known.rows.length ? "accepted" : "pending";
   const { rows } = await pool.query(
-    `INSERT INTO shares (id, owner_id, path, invited_email, token, invited_user_id)
-     VALUES ($1, $2, $3, $4, $5, (SELECT id FROM users WHERE lower(email) = $4))
+    `INSERT INTO shares (id, owner_id, path, invited_email, token, invited_user_id, status, accepted_at)
+     VALUES ($1, $2, $3, $4, $5, (SELECT id FROM users WHERE lower(email) = $4), $6, CASE WHEN $6 = 'accepted' THEN now() END)
      ON CONFLICT (owner_id, path, lower(invited_email)) DO UPDATE SET invited_email = EXCLUDED.invited_email
      RETURNING *`,
-    [crypto.randomUUID(), userId, path, email(invitedEmail), token],
+    [crypto.randomUUID(), userId, path, email(invitedEmail), token, status],
   );
   return rows[0];
 }

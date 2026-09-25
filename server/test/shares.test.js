@@ -183,3 +183,38 @@ test("leaving a share removes it for that person only", async () => {
   assert.deepEqual((await yeni("GET", "/api/notes")).body.notes, []);
   assert.ok((await kaan("GET", "/api/notes")).body.notes.some((n) => n.id === "k1"), "the owner keeps his notes");
 });
+
+test("someone who accepted once is not asked again (D19)", async () => {
+  const irmak = client();
+  const irmakUser = await irmak.login("irmak@example.com");
+  await kaan("PUT", "/api/notes/k9", note("k9", { path: ["Tatil"], content: { text: "otel" } }));
+
+  // First folder: a normal invitation, nothing shared until accepted.
+  const first = await kaan("POST", "/api/shares", { path: ["Tatil"], email: "irmak@example.com" });
+  assert.equal(first.body.status, "pending");
+  assert.deepEqual((await irmak("GET", "/api/notes")).body.notes, []);
+  await irmak("POST", "/api/shares/accept", { token: first.body.token });
+  assert.ok((await irmak("GET", "/api/notes")).body.notes.some((n) => n.id === "k9"));
+
+  // Second folder: she already trusted him once, so it is simply there.
+  await kaan("PUT", "/api/notes/k10", note("k10", { path: ["Filmler"], content: { text: "izlenecek" } }));
+  const second = await kaan("POST", "/api/shares", { path: ["Filmler"], email: "Irmak@Example.com" });
+  assert.equal(second.body.status, "accepted", "no second invitation to accept");
+  const seen = await irmak("GET", "/api/notes");
+  assert.ok(seen.body.notes.some((n) => n.id === "k10"), "the new folder is there at once");
+
+  // She can still walk away from it.
+  const hers = (await irmak("GET", "/api/shares")).body.withMe.find((s) => s.path.join("/") === "Filmler");
+  assert.equal((await irmak("DELETE", "/api/shares/" + hers.id)).status, 204);
+  assert.ok(!(await irmak("GET", "/api/notes")).body.notes.some((n) => n.id === "k10"));
+  assert.ok(irmakUser.id);
+});
+
+test("the people you have shared with are offered next time", async () => {
+  const contacts = (await kaan("GET", "/api/shares")).body.contacts;
+  assert.ok(Array.isArray(contacts));
+  assert.ok(contacts.some((c) => c.email === "irmak@example.com"), "Irmak accepted, so she is listed");
+  assert.equal(contacts.filter((c) => c.email === "irmak@example.com").length, 1, "once, however many folders");
+  const stranger = (await kaan("GET", "/api/shares")).body.contacts.some((c) => c.email === "yabanci@example.com");
+  assert.equal(stranger, false, "someone who never accepted is not");
+});

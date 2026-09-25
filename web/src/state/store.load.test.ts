@@ -22,7 +22,7 @@ beforeEach(() => {
 
 describe('load', () => {
   it('loads notes, folders and shares', async () => {
-    m.listShares.mockResolvedValue({ mine: [], withMe: [] })
+    m.listShares.mockResolvedValue({ mine: [], withMe: [], contacts: [] })
     const s = new NotexStore()
     await s.load('me')
     expect(s.getSnapshot().notes).toHaveLength(1)
@@ -43,7 +43,7 @@ describe('load', () => {
   })
 
   it('reports a real failure when the notes cannot be loaded', async () => {
-    m.listShares.mockResolvedValue({ mine: [], withMe: [] })
+    m.listShares.mockResolvedValue({ mine: [], withMe: [], contacts: [] })
     m.listNotes.mockRejectedValue(new Error('boom'))
     const s = new NotexStore()
     await s.load('me')
