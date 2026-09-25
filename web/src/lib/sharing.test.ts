@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { inviteTokenFrom, isSharedPath, ownNotes, shareMark, shareOf, sharedFolders, shareSummary, sharesForPath } from './sharing'
+import { initials, inviteTokenFrom, isSharedPath, ownNotes, personColor, shareMark, shareOf, sharedFolders, sharePeople, shareSummary, sharesForPath } from './sharing'
 import type { Note, Share } from './types'
 
 const ME = 'me-id'
@@ -102,5 +102,40 @@ describe('the shared mark on a note', () => {
   it('stays out of the way for a note nobody else can see', () => {
     expect(shareMark(note({}), [], [], ME)).toBeNull()
     expect(shareMark(note({ path: ['Kişisel'] }), [share({ path: ['Alışveriş'] })], [], ME)).toBeNull()
+  })
+})
+
+describe('faces on a shared note', () => {
+  const AYSE = { id: 'ayse-id', name: 'Ayşe Yılmaz', email: 'ayse@example.com', picture: null }
+
+  it('takes initials the way Google does, and copes without a name', () => {
+    expect(initials({ name: 'Kaan Berk Şahinli', email: 'k@x.com' })).toBe('KB')
+    expect(initials({ name: 'Irmak', email: 'i@x.com' })).toBe('I')
+    expect(initials({ name: null, email: 'ayse@example.com' })).toBe('A')
+    expect(initials({ name: '  ', email: 'ömer@x.com' })).toBe('Ö')
+  })
+
+  it('gives the same person the same colour every time', () => {
+    expect(personColor('ayse-id')).toBe(personColor('ayse-id'))
+    expect(personColor('ayse-id')).not.toBe(personColor('kaan-id'))
+  })
+
+  it('shows the owner for a folder shared with you', () => {
+    const got = sharePeople(note({ ownerId: KAAN.id }), [], [share({ owner: KAAN })], ME)
+    expect(got?.theirs).toBe(true)
+    expect(got?.people.map((p) => p.name)).toEqual(['Kaan'])
+    expect(got?.label).toBe('Kaan paylaştı')
+  })
+
+  it('shows everyone you shared your folder with, invited or not yet joined', () => {
+    const mine = [share({ path: ['Alışveriş'], person: AYSE }), share({ path: ['Alışveriş'], invitedEmail: 'irmak@example.com', status: 'pending', person: null })]
+    const got = sharePeople(note({ path: ['Alışveriş'] }), mine, [], ME)
+    expect(got?.theirs).toBe(false)
+    expect(got?.people.map((p) => p.email)).toEqual(['ayse@example.com', 'irmak@example.com'])
+    expect(got?.label).toBe('Ayşe Yılmaz ve irmak ile paylaşıldı · 1 davet bekliyor')
+  })
+
+  it('shows nothing for a note only you can see', () => {
+    expect(sharePeople(note({}), [], [], ME)).toBeNull()
   })
 })
