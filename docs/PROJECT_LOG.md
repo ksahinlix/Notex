@@ -1481,3 +1481,28 @@ lint and build pass, and the browser suites are unchanged: new frame 37, PWA
 so the very first visit is still online-only; from the second visit on it
 works offline. That is why the offline check reloads once before pulling the
 plug.
+
+### 2026-09-26 — The Paylaş dialog opened behind the notes (v1.5.2)
+**Reported:** "when invite popups show up it stays behind notes."
+
+**The cause, and why `z-index: 65` did nothing:** the dialog is opened from a
+folder's ⋯ menu, so it is declared inside `.app-sidebar` — and the new frame
+makes that `position: sticky`, which **creates a stacking context**. Inside
+it, no z-index can lift a child above content that is painted later in the
+page, so the note cards covered the dialog and its backdrop.
+
+**The fix:** `ShareModal` renders through `createPortal(..., document.body)`.
+A dialog should not depend on which component happened to declare it; this
+also covers anything else the sidebar may open later. The alternative — giving
+the sidebar a z-index — would have worked today and broken again the next
+time something is stacked.
+
+**Found while fixing it:** Esc did not close that dialog (only the ✕ and a
+click outside). It does now, like every other dialog.
+
+**How verified:** a new browser check paints nine points across the dialog and
+its backdrop and asserts nothing else is on top — it failed before the change
+(`ARTICLE.note`, `DIV.note-top`) and passes after — plus Esc closing it, and
+the same check for the note ⋯ and Taşı menus, which were already fine. 150
+web tests, and the suites unchanged: new frame 37, sharing 14, fonts 7,
+overlays at 360 px 31.
