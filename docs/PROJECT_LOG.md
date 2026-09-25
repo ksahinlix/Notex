@@ -1367,3 +1367,44 @@ horizontal scroll), and the guided tour walked through on both layouts
 
 **Next:** run the checks above locally, then deploy. Maybe bundle the fonts.
 
+### 2026-09-25 — A Galaxy S23 scrolled sideways; faces instead of an icon (v1.4.0)
+**Reported:** "there is too small lateral scrolling" on an S23, and the shared
+mark's tooltip "runs slow — is it bringing from db every time?"
+
+**The sideways scroll was real, and our tests had missed it:** every phone
+check used 390 or 412 px, but an S23 is **360**. At 360 the page measured
+370 px — the header's right-hand buttons had nowhere to go. Now the tabs may
+shrink (`min-width: 0`) while the buttons keep their size, with tighter
+spacing below 420 px and, below 340 px, the tabs moving to their own line.
+Checked at 360 and 320: both exactly the viewport width.
+
+**A second overflow, found while checking:** the reminder time picker on the
+agenda hung off the right edge (409 px), because it was anchored to a row
+indented by the date column. On phones it is now a small sheet centred in the
+screen. Anchoring it to the row's right edge instead was the first attempt,
+and it looked fixed — the page stopped scrolling — but the panel was then cut
+off on the *left*, where nothing scrolls. The browser check now measures every
+panel's box against the viewport, not just the page width.
+
+**The tooltip was not slow — it was the browser's.** Shares are fetched once
+at load and kept in memory; the mark is a pure function over that state, with
+no request on hover. What was slow is the native `title` delay of about a
+second, which also never appears on a phone. So, as suggested:
+- The mark is now **faces**: the Google photo when there is one, otherwise the
+  initials on a colour derived from the person, Google's own style — `KB` for
+  a folder Kaan Berk shared with you (ringed, because it is theirs), `AY` and
+  `I` side by side for a folder you share with Ayşe Yılmaz and Irmak, `+2`
+  when there are more than three.
+- The name appears in our own tooltip, instantly, on a device with a mouse.
+  On a touch screen a tap says it in the usual message strip, which also keeps
+  a long name from hanging off the side.
+
+**How verified:** 150 web tests (5 new: initials incl. Turkish letters, steady
+colours, who to show for each direction), lint, build. Browser checks: 29
+across the notes page, folder tree, composer, both pickers, delete dialog,
+reading mode and five tour steps at 360 px, and 23 for the sharing features,
+including that the name is hidden until hover and then appears at once.
+
+Note: the new look (D20 above) was designed against the state before this
+entry, so the narrow-phone fixes here were re-checked against the new frame
+rather than carried over — `.topbar` and `.view-tabs` no longer exist.

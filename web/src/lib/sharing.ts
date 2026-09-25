@@ -5,7 +5,7 @@
 // folders are shown apart, under "Paylaşılan", because you may both have an
 // "Alışveriş" and merging them would be a lie.
 
-import type { Note, Share } from './types'
+import type { Note, Person, Share } from './types'
 import { pathStartsWith } from './tree'
 
 /** One shared folder as it appears in the sidebar. */
@@ -100,4 +100,40 @@ export function shareMark(note: Note, mine: Share[], withMe: Share[], userId: st
   if (from) return `${personName(from.owner)} paylaştı`
   const here = sharesForPath(mine, note.path)
   return here.length ? shareSummary(here) : null
+}
+
+/** "Kaan Berk Şahinli" -> "KB", "ayse@example.com" -> "A". Google's own style. */
+export function initials(person: { name?: string | null; email?: string }): string {
+  const name = (person.name ?? '').trim()
+  if (name) {
+    const parts = name.split(/\s+/).filter(Boolean).slice(0, 2)
+    return parts.map((w) => w[0]).join('').toLocaleUpperCase('tr')
+  }
+  return (person.email ?? '?').trim()[0]?.toLocaleUpperCase('tr') ?? '?'
+}
+
+/** A steady colour per person, so the same face keeps the same circle. */
+export function personColor(key: string): number {
+  let h = 0
+  for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) % 360
+  return h
+}
+
+export interface SharePeople {
+  /** Who to show: the owner of a folder shared with you, or the people you shared with. */
+  people: Person[]
+  /** The sentence behind the faces. */
+  label: string
+  /** True when the folder is somebody else's. */
+  theirs: boolean
+}
+
+/** The faces to draw on a note, or null when nobody else can see it. */
+export function sharePeople(note: Note, mine: Share[], withMe: Share[], userId: string | null): SharePeople | null {
+  const from = shareOf(note, withMe, userId)
+  if (from?.owner) return { people: [from.owner], label: `${personName(from.owner)} paylaştı`, theirs: true }
+  const here = sharesForPath(mine, note.path)
+  if (!here.length) return null
+  const people = here.map((sh) => sh.person ?? { id: null, name: null, email: sh.invitedEmail, picture: null })
+  return { people, label: shareSummary(here), theirs: false }
 }
