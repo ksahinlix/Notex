@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Check, Copy, Link2, Trash2, UserPlus, X } from 'lucide-react'
 import { inviteLink, personName, sharesForPath } from '../lib/sharing'
 import type { Person, Share } from '../lib/types'
@@ -28,6 +29,13 @@ export default function ShareModal({ path, shares, onClose }: Props) {
   const already = new Set(here.map((s) => s.invitedEmail.toLowerCase()))
   const known = state.contacts.filter((c) => !already.has(c.email.toLowerCase()))
 
+  // Esc closes it, like every other dialog in the app.
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.addEventListener('keydown', esc)
+    return () => document.removeEventListener('keydown', esc)
+  }, [onClose])
+
   async function invite(address: string) {
     if (busy) return
     setBusy(true)
@@ -52,7 +60,11 @@ export default function ShareModal({ path, shares, onClose }: Props) {
 
   const label = (p: Person | { name: string | null; email: string }) => personName(p)
 
-  return (
+  // Straight onto the page, not where it was declared: this dialog is opened
+  // from the sidebar, which is `position: sticky` and therefore its own
+  // stacking context — inside it, no z-index can lift the dialog above the
+  // notes.
+  return createPortal(
     <div className="overlay" onClick={onClose}>
       <div className="modal card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
@@ -136,6 +148,7 @@ export default function ShareModal({ path, shares, onClose }: Props) {
           </p>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
