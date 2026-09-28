@@ -1532,3 +1532,39 @@ strip, the note card and the Hatırlatmalar page — with the parent invited as
 **Also corrected:** three of the older sharing tests gave two different people
 the *same* address, because the test factory defaults one. They only passed
 before because nothing deduplicated; each person now carries their own.
+
+### 2026-09-28 — The note box now looks like an invitation (v1.6.0)
+**Reported:** "note entering area look confusing on main page, can we
+emphasize it?"
+
+**What was wrong:** folded, the composer was a faint dashed rectangle the same
+width and nearly the same height as a note card, filled with grey placeholder
+text — it read as a disabled note rather than the place to write. The search
+box above it was the louder element, which is the wrong way round on a page
+whose first job is capturing a note.
+
+**What it is now (computers; on phones the composer stays behind "Not yaz"):**
+- a pen in an accent tile on the left, so the box says "write" at a glance;
+- a solid edge in `--border-strong` instead of the dashed one, a hairline
+  shadow, and accent border plus a lift on hover — it now reacts to the
+  pointer;
+- a short invitation, **"Yeni not yaz…"** or "<Klasör> klasörüne yeni not
+  yaz…", in `--text-soft` at 16 px. The long "Klasörünü AI seçer. Ctrl+Enter
+  kaydeder." moved to the open state, where it is actually useful;
+- on the right, muted, what will happen: "klasörü AI seçer", or "bu klasöre
+  kaydedilir" when a folder is open. Hidden below 860 px.
+
+The pen and that line disappear the moment the box opens, so the writing area
+stays clean.
+
+**How verified:** a browser check with 14 assertions — the pen, the hint and
+the short placeholder while folded; a solid edge whose colour differs from a
+note card's; both stepping aside on open with the full hint returning; saving
+still works; and inside a folder the box names it. 154 web tests, lint and
+build pass; the suites are unchanged: new frame 37, dark mode 16, overlays at
+360 px 31, sharing 14.
+
+**One assumption corrected by the test:** after saving, the box does **not**
+fold back — on a computer it deliberately keeps the cursor for the next note
+(D20), and folds only when you click away from an empty box. The check now
+records that instead of contradicting it.

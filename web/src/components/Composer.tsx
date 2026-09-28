@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Clock, ImagePlus, ListChecks, Loader2, Maximize2, Minimize2, Plus, Sparkles, X } from 'lucide-react'
+import { Clock, ImagePlus, ListChecks, Loader2, Maximize2, Minimize2, PenLine, Plus, Sparkles, X } from 'lucide-react'
 import { useCategorySuggestion } from '../ai/useAi'
 import { formatDate } from '../lib/format'
 import { imageFilesFrom } from '../lib/images'
@@ -168,6 +168,10 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
         </button>
       </div>
       <div className="composer card" data-tour="composer">
+        {/* Folded, the box should read as "write here", not as a greyed-out
+            note: a pen to the left and, where there is room, what happens
+            next on the right. */}
+        {!open && !expanded && <span className="composer-pen" aria-hidden="true"><PenLine size={18} /></span>}
         <RichEditor
           key={editorKey}
           ref={editor}
@@ -175,9 +179,15 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
           placeholder={
             isPhone
               ? 'Aklına geleni yaz… Klasörünü AI seçer.'
-              : selectedPath
-                ? `${selectedPath[selectedPath.length - 1]} klasörüne yaz… Ctrl+Enter kaydeder.`
-                : 'Aklına geleni yaz… Klasörünü AI seçer. Ctrl+Enter kaydeder.'
+              : // Folded it is an invitation, so it stays short; the hints
+                // belong in the open state, where they are needed.
+                !open && !expanded
+                ? selectedPath
+                  ? `${selectedPath[selectedPath.length - 1]} klasörüne yeni not yaz…`
+                  : 'Yeni not yaz…'
+                : selectedPath
+                  ? `${selectedPath[selectedPath.length - 1]} klasörüne yaz… Ctrl+Enter kaydeder.`
+                  : 'Aklına geleni yaz… Klasörünü AI seçer. Ctrl+Enter kaydeder.'
           }
           onChange={(t, e) => {
             setText(t)
@@ -187,6 +197,9 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
           onSubmit={() => void save()}
           onBusyChange={setImagesLoading}
         />
+        {!open && !expanded && (
+          <span className="composer-tip" aria-hidden="true">{selectedPath ? 'bu klasöre kaydedilir' : 'klasörü AI seçer'}</span>
+        )}
 
         {(chips.length > 0 || category.loading) && (
           <div className="suggestions" data-for={category.forText} data-loading={category.loading || undefined}>
