@@ -73,3 +73,40 @@ self.addEventListener('fetch', (e) => {
       .catch(() => caches.match(e.request).then((hit) => hit ?? caches.match('/'))),
   )
 })
+
+// ---- reminder notifications (D21) ----
+// The server sends {title, body, noteId, at}; anything unreadable still shows
+// something rather than nothing.
+self.addEventListener('push', (e) => {
+  let data = {}
+  try {
+    data = e.data ? e.data.json() : {}
+  } catch {
+    data = { body: e.data?.text?.() }
+  }
+  e.waitUntil(
+    self.registration.showNotification(data.title || 'Notex', {
+      body: data.body || 'Hatırlatman var.',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: data.noteId ? `reminder-${data.noteId}` : undefined, // one per reminder, not a pile
+      renotify: !!data.noteId,
+      data: { url: '/#hatirlatmalar', noteId: data.noteId ?? null },
+      lang: 'tr',
+    }),
+  )
+})
+
+// Tapping it opens the reminders page, reusing a tab that is already open.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close()
+  const url = e.notification.data?.url || '/'
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if (c.url.startsWith(self.location.origin)) return c.focus().then((w) => w.navigate?.(url) ?? w)
+      }
+      return self.clients.openWindow(url)
+    }),
+  )
+})

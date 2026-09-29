@@ -12,6 +12,7 @@ import ShareModal from './ShareModal'
 import NoteCard from './NoteCard'
 import TreeToggle from './TreeToggle'
 import SharedMark from './SharedMark'
+import PushToggle from './PushToggle'
 
 interface Props {
   notes: Note[]
@@ -263,6 +264,7 @@ export default function RemindersPage({ notes, contentOf, onOpenReader, pathOpti
       </div>
 
       <section className="notes agenda">
+        <div className="agenda-tools"><PushToggle /></div>
         {picked && <div className="crumb">{picked.label}</div>}
         {empty && (
           <div className="muted empty">

@@ -13,6 +13,7 @@ import { imageProxyRouter } from "./routes/imageProxy.js";
 import { notesRouter } from "./routes/notes.js";
 import { protectedFoldersRouter } from "./routes/protectedFolders.js";
 import { sharesRouter } from "./routes/shares.js";
+import { pushRouter, remindersDueRoute } from "./routes/push.js";
 
 // Which build is running. Render sets RENDER_GIT_COMMIT on every deploy; the
 // browser compares it with its own build and offers to reload when they differ.
@@ -25,6 +26,8 @@ export function createApp({
   // Tests pass a fake; production verifies with Google's library.
   verifyGoogle = googleClientId ? googleVerifier(googleClientId) : null,
   secureCookies = false, webDist = null, imageProxy = {}, aiService = null, aiDailyLimit,
+  // Notifications (D21): null push = the app runs without them.
+  push = null, cronSecret = null,
 }) {
   const app = express();
   app.set("trust proxy", 1); // Render sits behind a proxy; needed for req.ip / req.secure
@@ -78,6 +81,10 @@ export function createApp({
   app.use("/api/shares", auth, sharesRouter(pool, { findUser }));
   app.use("/api/image-proxy", auth, imageProxyRouter(imageProxy));
   app.use("/api/ai", auth, aiRouter(aiService, { pool, dailyLimit: aiDailyLimit }));
+  app.use("/api/push", pushRouter(pool, { push, requireAuth: auth, cronSecret }));
+  // Driven by an outside scheduler, so it authenticates with a shared secret
+  // instead of a session cookie.
+  app.post("/api/reminders/due", remindersDueRoute(pool, { push, cronSecret }));
   app.use("/api", (_req, res) => res.status(404).json({ error: "not found" }));
 
   // In production the same server also serves the built web app (web/dist),

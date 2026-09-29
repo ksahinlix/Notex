@@ -127,3 +127,22 @@ CREATE INDEX IF NOT EXISTS shares_email_idx ON shares (lower(invited_email));
 -- Who wrote a note. The note itself belongs to the folder's owner (user_id),
 -- so it stays with the folder when sharing stops.
 ALTER TABLE notes ADD COLUMN IF NOT EXISTS author_id TEXT REFERENCES users(id);
+
+-- ---- Push notifications for reminders (D21) ----------------------------
+
+-- One row per browser (or installed app) that agreed to notifications. The
+-- endpoint is the push service's URL for that device; it is the identity, so
+-- the same device re-subscribing replaces its row instead of adding one.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  endpoint     TEXT PRIMARY KEY,
+  user_id      TEXT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  p256dh       TEXT        NOT NULL,
+  auth         TEXT        NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_sent_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS push_user_idx ON push_subscriptions (user_id);
+
+-- The occurrence we last notified about, so a reminder is not sent twice and
+-- a repeating one still fires next time.
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS last_notified_at TIMESTAMPTZ;

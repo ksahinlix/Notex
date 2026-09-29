@@ -27,3 +27,14 @@ services:
         sync: false
       - key: CLOUDFLARE_API_TOKEN
         sync: false
+      # Reminder notifications (D21). The VAPID pair must stay the same across
+      # deploys, or every browser's subscription stops working.
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
+      # Guards /api/reminders/due; copy it into the scheduler (cron-job.org).
+      - key: CRON_SECRET
+        generateValue: true
