@@ -827,3 +827,8 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .pw-field input { height: 50px; padding-right: 48px; font-size: 16px; }
 .pw-show { position: absolute; right: 4px; top: 4px; width: 42px; height: 42px; }
 .modal .btn { min-height: 44px; }
+
+/* Reminder notifications (D21). */
+.agenda-tools { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+.push-toggle.on { border-color: var(--ok); color: var(--ok); }
+.push-toggle:disabled { opacity: 0.65; cursor: default; }

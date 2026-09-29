@@ -53,6 +53,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D18 | Folders can be shared with other people by e-mail invite; everyone invited may edit | Active |
 | D19 | Someone who accepted a folder from you is not asked again for the next one | Active |
 | D20 | New look: warm "paper and ink" theme, full-height sidebar on computers, tab bar + full-screen composer on phones | Active |
+| D21 | Reminder notifications by Web Push, sent by the server when an outside scheduler asks | Active |
 
 ### D1 — Start from scratch
 - **What:** New repository structure. `docs/prototype.jsx` is kept only as a
@@ -493,21 +494,53 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 
 ---
 
+### D21 — Reminder notifications by Web Push
+- **Decision:** the server sends notifications with **Web Push** (VAPID), and
+  an **outside scheduler** tells it when to look. No third-party notification
+  service, no app store, nothing new to pay for.
+  - Each browser subscribes for itself (`push_subscriptions`, keyed by the
+    endpoint the push service gives it), so "on" is per device, not per
+    account. The button lives on the Hatırlatmalar page.
+  - `POST /api/reminders/due` does the sending. It is called every few minutes
+    by cron-job.org and authenticates with `CRON_SECRET`, not a session — a
+    signed-in user cannot drive it either.
+  - **Why an outside scheduler:** a free Render service sleeps after 15
+    minutes and has no cron of its own. The same call wakes it, so the sleep
+    problem and the scheduling problem have one answer.
+- **What a notification may say:** for a plain note, its folder and first line.
+  For a note in a locked folder the server only has ciphertext, so it says
+  "Kilitli bir notunda hatırlatman var." and nothing else (D8).
+- **Who gets it:** everyone who can see the reminder — the owner and anyone
+  the folder is shared with who has accepted (D18).
+- **Not sending twice:** `notes.last_notified_at` holds the occurrence already
+  sent. A repeat therefore still fires next time, and a completed one
+  (`reminder_done_until`, `checked`) stays quiet.
+- **Nothing stale:** anything more than two hours late is dropped, so a server
+  that was asleep does not deliver yesterday's reminders in a burst.
+- **Times are stepped in UTC**, which is exact for Turkey (fixed +03). See the
+  open question about other time zones.
+- **iOS** only allows this for the app added to the home screen; the button
+  says so instead of failing quietly.
+- **Without the keys** (`VAPID_*`) the whole feature is simply off and the rest
+  of the app is unaffected.
+- **Revisit when:** notifications should be quiet at night, or a reminder
+  should go only to the person who wrote it.
+
+---
+
 ## 3. Open questions
 
 - **Images:** inline base64 in note content for now (up to 10 MB per request).
   Plan: move to a separate table or object storage (e.g. Cloudflare R2 free
   tier), encrypted in the browser for protected folders.
-- **Reminder delivery:** Web Push needs a server to send at the right time, but
-  the free Render service sleeps. Plan: an external free scheduler (GitHub
-  Actions cron or cron-job.org) calls a `/api/reminders/due` endpoint every few
-  minutes. iOS delivers web push only to PWAs added to the home screen.
 - **Rich-text editor:** `web/src/components/RichEditor.tsx` is a small
   contentEditable editor (text + images only) using `document.execCommand`,
   which is deprecated but still supported everywhere. Consider TipTap or
   Lexical if formatting (bold, lists) is wanted.
-- **Reminder notifications:** reminders are now detected (D14) and listed, but
-  nothing pops up at the time yet.
+- **Reminders in another time zone:** the server steps repeats in UTC (D21).
+  Turkey is a fixed +03, so a monthly "28th at 09:00" stays put; in a country
+  that changes its clocks, a repeating reminder would arrive an hour off after
+  the change. Storing each user's time zone would fix it.
 
 ---
 
@@ -1568,3 +1601,47 @@ build pass; the suites are unchanged: new frame 37, dark mode 16, overlays at
 fold back — on a computer it deliberately keeps the cursor for the next note
 (D20), and folds only when you click away from an empty box. The check now
 records that instead of contradicting it.
+
+### 2026-09-29 — Reminder notifications (D21, v1.7.0)
+**What:** a reminder can now reach you when it is due, even with the app
+closed. `server/src/reminders.js` decides what is due, `server/src/push.js`
+sends it, `/api/push/*` keeps the subscriptions, and `POST
+/api/reminders/due` is what the scheduler calls. In the browser,
+`lib/push.ts` + `PushToggle` on the Hatırlatmalar page turn it on per device,
+and the service worker shows the notification and opens the reminders page
+when it is tapped.
+
+**How verified:**
+- Server: 10 unit tests for *what is due* — one-off fires once, a repeat fires
+  today and not for every day since, a completed occurrence stays quiet while
+  the next one still fires, the 31st becomes the 30th in a short month, and a
+  reminder more than two hours late is dropped. Plus 7 integration tests: a
+  device subscribes and can leave, rubbish subscriptions are refused, a
+  stranger cannot subscribe, **the scheduler endpoint refuses everyone without
+  the secret — including a signed-in user**, a due reminder is sent once and
+  not twice, a shared folder notifies the owner alone until the invitation is
+  accepted and both afterwards, and a locked note's notification carries no
+  words from the note.
+- Browser: 12 checks — the button offers, registers the browser and sends the
+  endpoint and keys the server needs, says it is on, survives a reload, and
+  turns off again. 158 web tests in total, lint and build clean.
+
+**Three things the tests corrected:**
+- `currentState()` waited on `navigator.serviceWorker.ready`, which can hang
+  for good; the button then never appeared at all. It now asks
+  `getRegistration()` with a time limit, and a failure leaves the button
+  usable rather than invisible.
+- A leap-year test date (29 Feb 2026) is not a date. The clamping was right;
+  the test was wrong.
+- The push service cannot be reached from here (Chrome disables the Push API
+  in incognito, which is what Playwright contexts are; Firefox could not reach
+  Mozilla's autopush). The browser check therefore stubs
+  `pushManager.subscribe` and nothing else — our code, the service worker and
+  the request the server receives are all real. **Delivery itself still needs
+  one check on a real device.**
+
+**Next, and it needs you:** set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and
+`VAPID_SUBJECT` in Render from `server/.env` (Render generates `CRON_SECRET`
+itself), then create a cron-job.org job calling
+`POST https://notex-r2zk.onrender.com/api/reminders/due` with the header
+`x-cron-key: <CRON_SECRET>` every 5 minutes. That also keeps Render awake.

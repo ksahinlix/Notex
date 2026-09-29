@@ -485,6 +485,7 @@ Browser: Google button → ID token ──POST /api/auth/google──▶ Server:
 | **Build-time constant** (`define`) | `lib/version.ts` | the version at the foot of the page, compared with the server |
 | **Web app manifest + service worker** | `public/manifest.webmanifest`, `public/sw.js` | install to the home screen, and an offline app shell |
 | **Self-hosted `@font-face`** | `public/fonts/`, `src/fonts.css` | the two fonts without Google's CDN, and they work offline |
+| **Web Push + VAPID** | `lib/push.ts`, `public/sw.js`, `server/src/push.js` | reminders arrive with the app closed (D21) |
 | **`pointer: coarse` media query** | `index.css` | bigger buttons on touch screens, unchanged with a mouse |
 
 ---
