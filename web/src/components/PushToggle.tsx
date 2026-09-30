@@ -63,10 +63,21 @@ export default function PushToggle() {
         onClick={async () => {
           setBusy(true)
           try {
+            // Two notifications, on purpose. The first is made here on the
+            // device and never touches the network; the second comes from the
+            // server like a real reminder. Which ones appear says where the
+            // problem is: neither = the system is hiding them, only the first
+            // = the delivery never arrives.
+            const reg = await navigator.serviceWorker.getRegistration()
+            await reg?.showNotification('Notex · yerel deneme', {
+              body: 'Bu bildirim bu cihazda oluşturuldu.',
+              icon: '/icon-192.png',
+              tag: 'notex-local-test',
+            })
             const { sent } = await api.pushTest()
             showToast({
               message: sent
-                ? `${sent} cihaza gönderildi. Birkaç saniye içinde görünmezse bildirim ayarlarını kontrol et.`
+                ? `İki bildirim bekle: biri bu cihazdan, biri sunucudan (${sent} cihaza gönderildi). Hiçbiri görünmüyorsa bildirim ayarların kapalı.`
                 : 'Kayıtlı cihaz bulunamadı. Bildirimleri kapatıp yeniden aç.',
               error: !sent,
             })
