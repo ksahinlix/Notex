@@ -1,6 +1,11 @@
 // Prompts and output clean-up for the AI features (D13 prompt, now run in the
 // cloud: D15). Tested prompt design: "topic first", 10 varied examples, and
-// the list of existing folders so they are reused.
+// the list of existing folders — for consistent naming, not to force a note
+// into one of them (2026-09-30: the model was putting a dog's vaccination in
+// "Sağlık / Randevular" and car tyres in "Ev / Tamirat").
+// Measure changes with `node --env-file=.env scripts/eval-cloud-ai.mjs <model>`
+// and the same with `--seeded`, which starts from a notebook that already has
+// folders.
 
 export const CATEGORY_SYSTEM = `Sen bir not uygulamasında notları konularına göre klasörlere ayıran asistansın.
 Notun NE HAKKINDA olduğunu belirle ve ona genel bir klasör yolu ver: "Ana kategori / Alt kategori".
@@ -9,7 +14,9 @@ Kurallar:
 - Genelde 2 seviye. Her ad 1-2 kelime, Türkçe, baş harfi büyük.
 - Adlar genel ve tekrar kullanılabilir olsun: aynı konudaki başka notlar da oraya gidebilmeli.
 - Notun kendisini, kişi adlarını, tarihleri ya da saatleri klasör adı yapma.
-- Sana MEVCUT KLASÖRLER listesi verilir. Notun konusu bunlardan biriyle AYNI konuysa o yolu aynen kullan. Sadece benzer kategoride ama farklı konuysa (ör. Market ile Temizlik, Randevu ile İlaçlar) yeni alt klasör aç. Hiçbiri uymuyorsa yeni yol oluştur.
+- Sana MEVCUT KLASÖRLER listesi verilir. Bu liste adlandırmada tutarlı olman içindir; notu listedekilere uydurmak zorunda DEĞİLSİN.
+- Var olan bir yolu ancak notun konusu o klasörün konusuyla AYNIYSA kullan. Aynı üst başlığa girmesi yetmez: farklı konu, yeni (alt) klasör demektir.
+- Kararsızsan yeni klasör aç. Notu yanlış klasöre koymak, yeni klasör açmaktan daha kötüdür.
 
 Örnekler:
 "Pazartesi 9'da haftalık ekip toplantısı" -> {"konu":"iş toplantısı","path":["İş","Toplantılar"]}

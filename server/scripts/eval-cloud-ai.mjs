@@ -2,12 +2,31 @@
 // folders, starting from an empty notebook (each answer becomes an existing
 // folder for the next note). Uses the same prompt as the app.
 // Usage (from server/): node --env-file=.env scripts/eval-cloud-ai.mjs [model ...]
-import { readFileSync } from "node:fs";
+// The app's own prompt, so the numbers say something about the app. (It used
+// to copy it out of the browser's llm.ts, which went away with on-device AI.)
+import { CATEGORY_SYSTEM, categoryUserPrompt } from "../src/ai/prompts.js";
 
 const A = process.env.CLOUDFLARE_ACCOUNT_ID;
 const T = process.env.CLOUDFLARE_API_TOKEN;
-const src = readFileSync(new URL("../../web/src/ai/llm.ts", import.meta.url), "utf8");
-const SYSTEM = src.match(/SYSTEM_PROMPT = `([\s\S]*?)`/)[1];
+
+// --seeded: start from a notebook that already has folders, with notes whose
+// topics match none of them. This is where a prompt that leans on the existing
+// list shows itself — a poor fit gets chosen instead of a new folder.
+const SEED = [
+  "İş / Toplantılar", "Ev / Tamirat", "Alışveriş / Market", "Sağlık / Randevular",
+  "Finans / Faturalar", "Yazılım / React", "Seyahat / Planlar", "Kitaplar / Okunacaklar",
+  "Eğlence / İzlenecekler", "Yemek / Tarifler",
+];
+const seededNotes = [
+  "Köpeğin aşı kartını yenilet",
+  "Spor salonu üyeliği başladı, salı ve perşembe",
+  "Vergi beyannamesi son gün 31 Mart",
+  "Gitar akort etme uygulaması indir",
+  "Araba lastiklerini kışlıkla değiştir",
+  "İngilizce kelime çalışması: günde 20 kelime",
+  "Ehliyet yenileme için sağlık raporu gerekiyor",
+  "Balkona çiçek sulama sistemi kurulabilir",
+];
 
 const notes = [
   "Yarın 15:00 diş hekimi randevusu",
@@ -30,15 +49,15 @@ const notes = [
 ];
 
 async function classify(model, text, folders) {
-  const list = folders.map((p) => "- " + p).join("\n") || "(yok)";
+  const user = categoryUserPrompt(text, folders.map((f) => f.split(" / ")));
   const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${A}/ai/run/${model}`, {
     method: "POST",
     headers: { authorization: "Bearer " + T, "content-type": "application/json" },
     body: JSON.stringify({
       messages: [
-        { role: "system", content: SYSTEM + "\n\nSadece JSON döndür." },
+        { role: "system", content: CATEGORY_SYSTEM },
         // Qwen3 thinks before answering unless told not to.
-        { role: "user", content: `MEVCUT KLASÖRLER:\n${list}\n\nNot: ${JSON.stringify(text)}${model.includes("qwen3") ? " /no_think" : ""}` },
+        { role: "user", content: user + (model.includes("qwen3") ? " /no_think" : "") },
       ],
       temperature: 0,
       max_tokens: 1500,
@@ -62,16 +81,20 @@ async function classify(model, text, folders) {
   return { path, usage: j.result?.usage };
 }
 
-for (const model of process.argv.slice(2)) {
-  console.log(`\n=== ${model}`);
-  const folders = new Set();
+const seeded = process.argv.includes("--seeded");
+for (const model of process.argv.slice(2).filter((a) => !a.startsWith("--"))) {
+  console.log(`\n=== ${model}${seeded ? " (notebook that already has folders)" : ""}`);
+  const folders = new Set(seeded ? SEED : []);
+  const list = seeded ? seededNotes : notes;
+  let reusedSeed = 0;
   let ms = 0, tokensIn = 0, tokensOut = 0, fails = 0;
-  for (const note of notes) {
+  for (const note of list) {
     const t0 = Date.now();
     let line;
     try {
       const { path, usage } = await classify(model, note, [...folders].sort());
       const key = path.join(" / ");
+      if (SEED.includes(key)) reusedSeed++;
       line = `${key}${folders.has(key) ? "  (reused)" : ""}`;
       folders.add(key);
       tokensIn += usage?.prompt_tokens ?? 0;
@@ -83,5 +106,7 @@ for (const model of process.argv.slice(2)) {
     ms += Date.now() - t0;
     console.log(`  ${note.slice(0, 50).padEnd(50)} -> ${line}`);
   }
-  console.log(`  avg ${Math.round(ms / notes.length)} ms/note · ${folders.size} folders · avg tokens in ${Math.round(tokensIn / notes.length)} out ${Math.round(tokensOut / notes.length)} · errors ${fails}`);
+  const n = list.length;
+  console.log(`  avg ${Math.round(ms / n)} ms/note · ${folders.size} folders · avg tokens in ${Math.round(tokensIn / n)} out ${Math.round(tokensOut / n)} · errors ${fails}`);
+  if (seeded) console.log(`  ${reusedSeed}/${n} notes went into a folder that already existed`);
 }
