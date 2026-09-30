@@ -832,3 +832,4 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .agenda-tools { display: flex; justify-content: flex-end; margin-bottom: 12px; }
 .push-toggle.on { border-color: var(--ok); color: var(--ok); }
 .push-toggle:disabled { opacity: 0.65; cursor: default; }
+.push-tools { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }

@@ -83,6 +83,17 @@ test("a browser subscribes, appears as a device, and can leave again", async () 
   assert.equal((await kaan("GET", "/api/push/status")).body.devices, 1);
 });
 
+test("the test button sends to your own devices, and nobody else's", async () => {
+  sent.length = 0;
+  const mine = await kaan("POST", "/api/push/test");
+  assert.equal(mine.status, 200);
+  assert.deepEqual(sent.at(-1).userIds, [kaanUser.id], "only the person who pressed it");
+  assert.match(sent.at(-1).payload.body, /Test bildirimi/);
+
+  const nobody = client();
+  assert.equal((await nobody("POST", "/api/push/test")).status, 401, "and not for a stranger");
+});
+
 test("rubbish subscriptions are refused, and a stranger cannot subscribe at all", async () => {
   assert.equal((await kaan("POST", "/api/push/subscribe", { endpoint: "http://not-https", keys: {} })).status, 400);
   assert.equal((await kaan("POST", "/api/push/subscribe", { endpoint: "https://x/1" })).status, 400);

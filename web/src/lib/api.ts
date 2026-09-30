@@ -59,6 +59,8 @@ export const api = {
   pushStatus: () => request<{ configured: boolean; devices: number }>('GET', '/api/push/status'),
   pushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) => request<{ ok: true }>('POST', '/api/push/subscribe', sub),
   pushUnsubscribe: (endpoint: string) => request<null>('POST', '/api/push/unsubscribe', { endpoint }),
+  /** Sends a notification to your own devices now, to check the chain works. */
+  pushTest: () => request<{ sent: number; gone: number }>('POST', '/api/push/test'),
   createShare: (path: string[], email: string) => request<Share>('POST', '/api/shares', { path, email }),
   acceptShare: (by: { token: string } | { id: string }) => request<Share>('POST', '/api/shares/accept', by),
   removeShare: (id: string) => request<null>('DELETE', `/api/shares/${encodeURIComponent(id)}`),

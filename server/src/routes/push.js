@@ -39,6 +39,24 @@ export function pushRouter(pool, { push, requireAuth, cronSecret }) {
     res.json({ configured: !!push, devices: rows[0].devices });
   });
 
+  /**
+   * Sends a notification to your own devices, now. It answers the question a
+   * reminder cannot: whether the chain from here to the screen works, without
+   * waiting for a reminder to come due — and it tells the two failures apart,
+   * because a notification that was sent but never seen is the operating
+   * system hiding it.
+   */
+  r.post("/test", requireAuth, async (req, res) => {
+    if (!push) return res.status(503).json({ error: "push not configured" });
+    const result = await push.sendToUsers(pool, [req.userId], {
+      title: "Notex",
+      body: "Test bildirimi. Bunu gördüysen hatırlatmalar da gelecek.",
+      noteId: null,
+      at: new Date().toISOString(),
+    });
+    res.json(result);
+  });
+
   return r;
 }
 
