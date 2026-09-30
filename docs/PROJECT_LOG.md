@@ -1667,3 +1667,44 @@ refuses a stranger (8 push tests in total), and a browser check that the
 button appears only when notifications are on, asks the server to send, and
 reports the number of devices. 158 web tests, 53 server tests, lint and build
 clean.
+
+### 2026-09-30 — The folder AI stops forcing notes into folders you already have (v1.7.2)
+**Reported:** "we prioritised existing folders first, I think it was not a good
+idea — it tries to put notes in existing folders."
+
+**Measured before changing anything.** `scripts/eval-cloud-ai.mjs` had been
+broken since on-device AI was removed: it read the prompt from
+`web/src/ai/llm.ts`, a file that no longer exists. It now imports the server's
+own prompt, so what it measures is what the app sends, and it gained a
+`--seeded` mode that starts from a notebook that **already has ten folders** —
+the case being complained about, which the old empty-notebook run could never
+show.
+
+With the old prompt, **4 of 8** notes on new topics were pushed into an
+existing folder, and three of those were plainly wrong:
+- a dog's vaccination card → `Sağlık / Randevular` (the human appointments folder)
+- a tax return → `Finans / Faturalar` (bills)
+- car tyres → `Ev / Tamirat` (home repairs)
+
+**The change:** the rule that said "if the topic is the same as an existing
+folder, use that path exactly" became three lines that say the list is for
+consistent naming and the note does not have to fit it; that an existing path
+may only be used when the topic is **the same**, since sharing a top-level
+heading is not enough; and that when in doubt a new folder is better, because
+filing a note in the wrong place is worse than making a folder.
+
+**After:** **2 of 8**, and both bad fits above are gone — the dog goes to
+`Sağlık / Hayvanlar`, the tax return to `Finans / Vergiler`. Car tyres still
+land in `Ev / Tamirat`, which is the one clear miss left. The empty-notebook
+run is unchanged: the same 13 folders, with films and series still sharing
+`Eğlence / İzlenecekler` and two doctor's visits sharing
+`Sağlık / Randevular` — so sensible reuse survived.
+
+**Deliberately not done:** naming the failing cases (cars, pets) in the prompt.
+It would have scored better on this very eval while teaching the model
+nothing general.
+
+**How verified:** the two eval runs above against the real model, plus 53
+server tests. One run of the full server suite reported a failure in
+`push.test.js` that passes on its own and on a re-run — the parallel
+throwaway databases again, not the change.
