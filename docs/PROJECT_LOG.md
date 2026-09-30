@@ -1645,3 +1645,25 @@ when it is tapped.
 itself), then create a cron-job.org job calling
 `POST https://notex-r2zk.onrender.com/api/reminders/due` with the header
 `x-cron-key: <CRON_SECRET>` every 5 minutes. That also keeps Render awake.
+
+### 2026-09-30 — Notifications are live, and a way to test them (v1.7.1)
+**Live:** the cron on cron-job.org ran against the deployed server and
+answered `{"due":1,"sent":2,"gone":0}` — one reminder due, pushed to two
+subscribed browsers, neither subscription stale. That closes the "delivery
+still needs a check on a real device" note from D21.
+
+**Added:** `POST /api/push/test` and a **"Deneme gönder"** button beside the
+switch on the Hatırlatmalar page (only once notifications are on). It sends a
+notification to your own devices immediately, through the same path a reminder
+takes. It exists to tell two failures apart that otherwise look identical:
+- the message never arrived (subscription, keys, or the server) — the button
+  says so, reporting how many devices it reached;
+- the message arrived and the system did not show it — the button says it was
+  sent, and nothing appears. On Windows that means the app's own entry in
+  Settings › System › Notifications, or Focus assist.
+
+**How verified:** a server test that it sends to the caller's devices only and
+refuses a stranger (8 push tests in total), and a browser check that the
+button appears only when notifications are on, asks the server to send, and
+reports the number of devices. 158 web tests, 53 server tests, lint and build
+clean.
