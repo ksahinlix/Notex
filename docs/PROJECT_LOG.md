@@ -56,6 +56,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D21 | Reminder notifications by Web Push, sent by the server when an outside scheduler asks | Active |
 | D22 | A folder can be marked "to-do": every note in it gets a tick box, and ticked ones drop to the bottom | Active |
 | D23 | Backups: one gzipped JSON of everything, fetched or pushed on a schedule, to storage that needs no account | Active |
+| D24 | Deleting puts a note in the trash for 30 days instead of wiping it; the existing cron does the emptying | Active |
 
 ### D1 — Start from scratch
 - **What:** New repository structure. `docs/prototype.jsx` is kept only as a
@@ -156,8 +157,10 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   - `PUT /api/notes/:id` creates or replaces a note, and is accepted only if its
     `updatedAt` is newer than the server's copy. Otherwise the server returns
     `409` with its current version (last-write-wins).
-  - `DELETE` doesn't remove the row: it sets `deleted_at` (a "tombstone") and
-    wipes the content.
+  - `DELETE` doesn't remove the row: it sets `deleted_at` (a "tombstone").
+    The content used to be wiped in the same statement; since D24 it stays for
+    30 days so the note can come back, and only then is it wiped. The row
+    itself is never removed either way.
   - `GET /api/notes?since=<time>` returns every change after that time,
     including deletions.
 - **Why:** This is the groundwork for offline-first use. The app will store
@@ -587,8 +590,10 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   it, so the same password opens a restored copy. The server has never had the
   plaintext and a backup was no reason to start (D8). Anyone who steals the
   file gets ciphertext.
-- **Deleted notes are left out.** Deleting wipes the content in the same
-  statement that sets `deleted_at`, so a tombstone would restore nothing.
+- **Deleted notes are left out.** Since D24 a deleted note keeps its content
+  for 30 days, but the backup is the live notebook, not the undo buffer: the
+  trash is a short-lived convenience and restoring a backup should not
+  resurrect what you threw away.
 - **Never deletes, never overwrites.** Every run writes a new object named for
   its time (`notex/2026/notex-20261002T030000Z.json.gz`, so sorting by name
   sorts by time). Pruning is an R2 lifecycle rule, not code — a bug in the app
@@ -617,6 +622,42 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 - **Revisit when:** images move out of the notes table (then the bucket holds
   them too, and the dump shrinks), or the backup needs to cover more users
   than fit in memory.
+
+### D24 — The trash
+- **Decision:** `DELETE /api/notes/:id` sets `deleted_at` and **keeps the
+  content**. It stays recoverable for **30 days**, then the content is wiped —
+  which is exactly what deleting used to do immediately. The tombstone row is
+  never removed, so other devices still learn about the deletion (D9).
+- **Why:** deleting was the only truly irreversible thing in the app. One
+  mistaken tap and the words were gone from the database in the same statement
+  that marked the note deleted; a confirm dialog was the whole of the safety
+  net. Backups (D23) cover losing the database, not losing a note between
+  backups.
+- **Undo is the feature; the trash is the fallback.** Deleting now offers
+  **Geri al** in a toast, which is what will actually get used. The Çöp
+  kutusu view exists for when the toast has gone.
+- **Who sees it:** the same people who could see the note (`VISIBLE_NOTES`),
+  and restoring needs the same right as editing (`canWriteNote`). So if
+  someone deletes a note in a folder you share, either of you can put it back
+  — the person who made the mistake is usually the one who wants to fix it.
+- **Emptied by the cron that already runs.** `purgeTrash` is called from
+  `POST /api/reminders/due` every few minutes, and the response says how many
+  it wiped. One scheduled job to set up instead of two. If that job is ever
+  turned off, the trash simply stops emptying; nothing breaks.
+- **Locked notes stay locked in the trash**: `cipher` is kept untouched, so a
+  deleted note in a protected folder is unreadable there too, and comes back
+  still encrypted (D8).
+- **A purged note cannot be restored**: `POST /:id/restore` answers 410 rather
+  than bringing back an empty note.
+- **Deleting still loses a race with a newer edit, and vice versa** (D9):
+  a save made before the delete does not resurrect the note, and a save made
+  after it does.
+- **Known wrinkle:** the storage quota already ignored deleted notes, so a
+  note in the trash does not count against the 50 MB although it still takes
+  the space. Bounded by the 30 days, so it was left alone rather than making
+  someone at quota wait for a purge.
+- **Revisit when:** 30 days is the wrong number, or the trash should be in the
+  backup after all.
 
 ---
 
@@ -2012,3 +2053,60 @@ server tests.
 **Next:** trash/restore, then offline sync, then images out of the notes table
 (the structural fix — compression only goes so far while every image is
 re-downloaded on every load).
+
+### 2026-10-02 — The trash (D24, v1.12.0)
+
+**Why:** deleting was the only irreversible thing left in the app. The content
+was thrown away in the same statement that tombstoned the note, so a mistaken
+tap was final and the confirm dialog was the whole safety net. Backups (D23)
+protect against losing the database, not against losing one note between
+backups.
+
+**What changed:** `DELETE /api/notes/:id` now only sets `deleted_at`. The note
+keeps everything it had for 30 days and can be restored; after that
+`purgeTrash()` wipes the content, which is exactly what deleting used to do
+straight away. The tombstone row is never removed either way, so devices
+syncing with `?since=` still learn about the deletion (D9).
+
+**Undo is the feature.** Deleting shows a toast with **Geri al**, and that is
+what will actually get used day to day. The **Çöp kutusu** view, under the
+folder tree, is the fallback for when the toast has gone. It also has a
+permanent delete, which asks first because that one really is final.
+
+**Emptied by the cron that already runs.** `purgeTrash` is called from
+`POST /api/reminders/due`, whose response now carries `purged`. One scheduled
+job to set up rather than two; if that job is ever switched off the trash just
+stops emptying.
+
+**Loaded only when opened:** deleted notes still carry their images, so the
+trash is fetched on demand and `GET /api/notes` returns only a `trashCount`
+for the sidebar badge. Having just made images lighter, it would have been
+careless to put them back into startup.
+
+**Shared folders:** whoever could see a note sees it in the trash, and
+restoring takes the same right as editing. So if Ayşe deletes something in a
+folder Kaan shared with her, either of them can put it back — the person who
+made the mistake is usually the one who wants to fix it.
+
+**Two things worth knowing.** A note in the trash still occupies storage but
+does not count against the 50 MB quota, because that query already ignored
+deleted notes; bounded by the 30 days, so it was left rather than making
+someone at quota wait for a purge. And the backup still excludes deleted
+notes: the dump is the live notebook, and restoring one should not resurrect
+what you threw away.
+
+**How verified:** 9 new server tests — the content survives a delete and the
+trash says so; restore puts it back in its folder; a locked note is ciphertext
+in the trash and comes back encrypted; deleting for good wipes the words but
+keeps the tombstone, and the words are really gone from `?since=`; the purge
+takes only what has aged out and is a no-op on a second run; both people in a
+shared folder can delete and restore; a stranger gets 404s and sees nothing;
+restoring something never deleted is a 404; and a save older than the delete
+does not resurrect the note while a newer one does. 87 server tests in all.
+Plus 23 Playwright checks on desktop and at 360 px: the undo toast and that it
+really restores, the sidebar count going up and down, that the trash is
+fetched only when opened, the view with its retention line and no composer,
+restoring from the list, the confirmation before a permanent delete, and the
+`#cop` address.
+
+**Next:** offline sync, then images out of the notes table.

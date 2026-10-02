@@ -252,6 +252,22 @@ input:focus-visible, .editor:focus-visible { outline: none; }
 .comments { margin-top: 10px; padding-left: 12px; border-left: 2px solid var(--border); }
 .comment { font-size: 14px; color: var(--text-muted); padding: 4px 0; display: flex; justify-content: space-between; gap: 8px; }
 
+/* ---- The trash (D24) ---- */
+.trash-row {
+  display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 10px; padding: 6px 10px;
+  background: none; border: none; border-top: 1px solid var(--border); border-radius: 0;
+  font: inherit; font-size: 14px; color: var(--text-muted); cursor: pointer;
+}
+.trash-row .grow { flex: 1; text-align: left; }
+.trash-row:hover { color: var(--text); }
+.trash-row.on { color: var(--accent-strong); font-weight: 600; }
+.trash-note { font-size: 13px; margin: 0 0 14px; }
+.trash-item .note-actions { align-items: center; gap: 4px; }
+.trash-item .note-actions .btn-ghost { font-size: 13px; white-space: nowrap; }
+.trash-item .icon-btn.danger { color: var(--danger); }
+.trash-item .icon-btn.danger:hover { background: var(--danger-soft); }
+.composer-slot.hidden { display: none; }
+
 /* ---- To-do folders (D22): ticked notes, folded away at the foot of the list ---- */
 .done-group { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 10px; }
 .done-head {

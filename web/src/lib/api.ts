@@ -46,10 +46,17 @@ export const api = {
 
   /** Without `since`: all live notes. With `since`: all changes after it, including deletions. */
   listNotes: (since?: string) =>
-    request<{ notes: Note[]; serverTime: string }>('GET', since ? `/api/notes?since=${encodeURIComponent(since)}` : '/api/notes'),
+    request<{ notes: Note[]; trashCount?: number; serverTime: string }>('GET', since ? `/api/notes?since=${encodeURIComponent(since)}` : '/api/notes'),
   /** Create or replace. Rejects with status 409 if the server has a newer version. */
   saveNote: (note: Note) => request<Note>('PUT', `/api/notes/${encodeURIComponent(note.id)}`, note),
+  /** Into the trash: the note keeps its content for 30 days (D24). */
   deleteNote: (id: string) => request<null>('DELETE', `/api/notes/${encodeURIComponent(id)}`),
+
+  // The trash (D24).
+  listTrash: () => request<{ notes: Note[]; days: number }>('GET', '/api/notes/trash'),
+  restoreNote: (id: string) => request<Note>('POST', `/api/notes/${encodeURIComponent(id)}/restore`),
+  /** Wipes the content now instead of waiting for it to age out. */
+  purgeNote: (id: string) => request<null>('DELETE', `/api/notes/${encodeURIComponent(id)}/forever`),
 
   // Shared folders (D18).
   listShares: () => request<{ mine: Share[]; withMe: Share[]; contacts: Person[] }>('GET', '/api/shares'),

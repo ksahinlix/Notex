@@ -9,6 +9,7 @@ import { parsePath } from '../lib/tree'
 import type { Note, NoteContent } from '../lib/types'
 import { confirmDialog } from '../state/confirm'
 import { store } from '../state/store'
+import { showToast } from '../state/toast'
 import LockedCard from './LockedCard'
 import MoveMenu from './MoveMenu'
 import NoteBody from './NoteBody'
@@ -139,7 +140,13 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
       confirmLabel: 'Sil',
       danger: true,
     })
-    if (ok) store.remove(note)
+    if (!ok) return
+    store.remove(note)
+    // The note is in the trash now, not gone, so undo is a real offer (D24).
+    showToast({
+      message: 'Not çöp kutusuna taşındı.',
+      actions: [{ label: 'Geri al', run: () => void store.restore(note.id) }],
+    })
   }
 
   async function addComment() {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlarmClock, ChevronDown, ChevronRight, CircleHelp, FolderClosed, Loader2, Lock, LockOpen, LogOut, NotebookPen, Plus, Search, Sparkles, X } from 'lucide-react'
+import { AlarmClock, ChevronDown, ChevronRight, CircleHelp, FolderClosed, Loader2, Lock, LockOpen, LogOut, NotebookPen, Plus, Search, Sparkles, Trash2, X } from 'lucide-react'
 import { clearSearchCache, useSemanticSearch } from '../ai/useAi'
 import { buildAgenda, isReminderNote } from '../lib/agenda'
 import { queryTerms } from '../lib/highlight'
@@ -30,11 +30,14 @@ import VersionTag from './VersionTag'
 import { ToastHost } from './ToastHost'
 import ThemeToggle from './ThemeToggle'
 import Tour from './Tour'
+import Trash from './Trash'
 
 const PATH_OPTIONS_ID = 'notex-paths'
 
-type View = 'notes' | 'reminders'
-const viewFromHash = (): View => (location.hash === '#hatirlatmalar' ? 'reminders' : 'notes')
+type View = 'notes' | 'reminders' | 'trash'
+const viewFromHash = (): View =>
+  location.hash === '#hatirlatmalar' ? 'reminders' : location.hash === '#cop' ? 'trash' : 'notes'
+const hashFor = (v: View) => (v === 'reminders' ? '#hatirlatmalar' : v === 'trash' ? '#cop' : location.pathname)
 
 export default function NotesPage({ user, onLogout }: { user: User; onLogout: () => void }) {
   const state = useNotex()
@@ -49,7 +52,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
   const [view, setViewState] = useState<View>(viewFromHash)
   const setView = (v: View) => {
     setViewState(v)
-    history.replaceState(null, '', v === 'reminders' ? '#hatirlatmalar' : location.pathname)
+    history.replaceState(null, '', hashFor(v))
   }
   const [lightbox, setLightbox] = useState<string | null>(null)
   /** "Tamamlananlar": the ticked notes at the foot of the list, folded away (D22). */
@@ -335,7 +338,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
           </button>
         </nav>
 
-        {view === 'notes' && (
+        {view !== 'reminders' && (
           <div className="sb-folders" data-tour="tree">
             <div className="sheet-grip" aria-hidden="true" />
             <div className="sheet-head">
@@ -375,6 +378,16 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
                 setTreeOpen(false)
               }}
             />
+            <button
+              className={`trash-row ${view === 'trash' ? 'on' : ''}`}
+              onClick={() => {
+                setView('trash')
+                setTreeOpen(false)
+              }}
+            >
+              <Trash2 size={13} /> <span className="grow">Çöp kutusu</span>
+              {state.trashCount > 0 && <span className="count">{state.trashCount}</span>}
+            </button>
             {treeError && <div className="error" style={{ marginTop: 6 }}>{treeError}</div>}
           </div>
         )}
@@ -413,7 +426,14 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
             </div>
           )}
 
-          {view === 'reminders' ? (
+          {view === 'trash' ? (
+            <div className="page-head">
+              <div className="page-head-main">
+                <h1 className="page-title">Çöp kutusu</h1>
+                <span className="page-count">{state.trashCount} not</span>
+              </div>
+            </div>
+          ) : view === 'reminders' ? (
             <div className="page-head">
               <div className="page-head-main">
                 <h1 className="page-title">Hatırlatmalar</h1>
@@ -469,7 +489,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
           )}
 
           {/* One composer for both views, so a draft survives switching. */}
-          <div className={`composer-slot ${searching && view === 'notes' ? 'searching' : ''}`}>
+          <div className={`composer-slot ${searching && view === 'notes' ? 'searching' : ''} ${view === 'trash' ? 'hidden' : ''}`}>
             <Composer
               selectedPath={sharedPick ? sharedPick.path : selectedPath}
               pathOptionsId={PATH_OPTIONS_ID}
@@ -478,7 +498,9 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
             />
           </div>
 
-          {view === 'reminders' ? (
+          {view === 'trash' ? (
+            <Trash />
+          ) : view === 'reminders' ? (
             <RemindersPage
               notes={state.notes}
               contentOf={contentOf}
