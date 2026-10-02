@@ -861,7 +861,21 @@ the strip (and its "Tümü" link) never disappears while reminders exist.
 - Each image becomes a grey placeholder, then loads **directly** or — when the
   site blocks it (CORS) — through our **`/api/image-proxy`**. **Ekle** waits
   until all images are in.
-- Images are **shrunk** to max 1600 px JPEG before saving (Neon's 0.5 GB).
+- Images are **shrunk** before saving: no more than 1600 px on the longest
+  side, re-encoded as **WebP** (JPEG only where WebP cannot be written, which
+  now means Safari before 14). Inline storage means every image rides along in
+  every `GET /api/notes`, so this is what the app costs to open, not just what
+  Neon's 0.5 GB holds.
+  - **Whichever is smaller wins.** The re-encoded version is only kept if it
+    is shorter than what came in, so storing an image can never make it
+    bigger — an 8×8 flat PNG is 170 characters and beats any WebP container.
+  - **Nothing is waved through.** An image that already fitted used to be
+    stored untouched if it was under 300 KB, which is exactly what a pasted
+    screenshot is. Those now re-encode too, at a higher quality (0.92 against
+    0.85) because lossy artefacts show on text. Measured: a 900×600 screenshot
+    went from 101 KB stored to 66 KB.
+  - **WebP keeps transparency**, so the white background that JPEG needed is
+    only painted on the fallback path.
 - The proxy is guarded against **SSRF** (someone using our server to reach
   internal addresses): login required, http(s) only, **every redirect's**
   address checked against private ranges (127.x, 10.x, 169.254.x …), images
