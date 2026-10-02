@@ -55,7 +55,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D20 | New look: warm "paper and ink" theme, full-height sidebar on computers, tab bar + full-screen composer on phones | Active |
 | D21 | Reminder notifications by Web Push, sent by the server when an outside scheduler asks | Active |
 | D22 | A folder can be marked "to-do": every note in it gets a tick box, and ticked ones drop to the bottom | Active |
-| D23 | Backups: one gzipped JSON of everything, written to Cloudflare R2 by the same scheduler as the reminders | Active |
+| D23 | Backups: one gzipped JSON of everything, fetched or pushed on a schedule, to storage that needs no account | Active |
 
 ### D1 — Start from scratch
 - **What:** New repository structure. `docs/prototype.jsx` is kept only as a
@@ -561,18 +561,27 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   by date.
 
 ### D23 — Backups to Cloudflare R2
-- **Decision:** the server writes **one gzipped JSON file** holding everything
-  needed to rebuild the database — users, live notes, `protected_folders`,
-  to-do marks and shares — to a **Cloudflare R2** bucket, driven by the same
-  outside scheduler that already sends the reminders (D21) and guarded by the
-  same `CRON_SECRET`.
-- **Why there, and not a home server:** a machine at home would have to be
-  switched on, reachable and remembered. The account and the scheduler already
-  exist, R2's free tier is 10 GB with no egress charge, and it is the same
-  storage images will want when they leave the database. Nothing of the
-  owner's has to be running.
-- **Why pull-free:** the server pushes. A home server would have had to poll
-  from behind NAT; this way there is nothing new listening anywhere.
+- **Decision:** **one gzipped JSON file** holding everything needed to rebuild
+  the database — users, live notes, `protected_folders`, to-do marks and
+  shares — produced on a schedule and stored somewhere else. Both directions
+  exist, guarded by the same `CRON_SECRET` as the reminders (D21):
+  - `GET /api/backup` hands the file over, so **whatever asks keeps it**. This
+    needs no storage account at all, which is why it is the one we use.
+  - `POST /api/backup` has the server push it into a **Cloudflare R2** bucket,
+    for when nothing of the owner's can be relied on to be switched on.
+- **Why not R2 after all:** it was the first choice — the Cloudflare account
+  and the scheduler already existed, and 10 GB free with no egress charge is
+  more than a JSON file will ever need. Then enabling R2 turned out to demand
+  a **payment method**, even though the free tier costs nothing, and the owner
+  did not want to hand one over for a personal notebook. The push code stays
+  in place and tested: it is inert without the credentials, and it is there
+  the day a bucket exists.
+- **Why a pull is the better shape anyway:** the destination stops being the
+  server's business. A scheduled task on a PC, a machine at home, a CI job —
+  anything that can make an HTTP request with a header can keep the backups,
+  and none of them has to be reachable from the internet. Dropping the file
+  into a folder a cloud drive already syncs makes it off-site with no API, no
+  key and no account.
 - **Locked notes stay locked.** `cipher` is copied exactly as it sits in the
   database and `protected_folders` (salt, iterations, check value) comes with
   it, so the same password opens a restored copy. The server has never had the
@@ -595,6 +604,12 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   lines in `src/r2.js` rather than the AWS SDK for a single PUT, and the
   request it builds is tested in detail because a signing mistake would
   otherwise only appear in production.
+- **What actually runs today:** `scripts/pull-backup.ps1` on Windows Task
+  Scheduler, writing into a OneDrive-synced folder and keeping the last 60. It
+  retries while Render's free instance wakes up, checks the file really is a
+  gzip rather than an error page, prunes only files it made, and exits
+  non-zero so a failure shows as a failed task instead of a backup that
+  silently never happened.
 - **Known limit:** the dump is built in memory and stringified, so peak usage
   is roughly twice its size. With a handful of users and mostly text that is
   nowhere near Render's 512 MB; a notebook full of inline images would need
@@ -1881,3 +1896,48 @@ it works, a 502 carries R2's complaint.
 **Next:** set up the bucket, the token and the daily cron job (README has the
 steps). Then the image-size wins, trash/restore, offline sync, and images to
 R2 last.
+
+### 2026-10-02 — Backups without a storage account (D23 amended, v1.10.0)
+
+**Why:** R2 asked for a credit card. The free tier genuinely costs nothing,
+but enabling R2 at all wants a payment method on file, and handing one over
+for a personal notebook was not worth it. Since R2 was my suggestion, the fix
+was mine to make.
+
+**What changed:** the backup is now something you can **fetch**, not only
+something the server **pushes**. `GET /api/backup`, with the same
+`CRON_SECRET` header, returns the gzipped dump, names it in
+`content-disposition` and puts the row counts in `x-notex-counts` so a caller
+knows what it got without unzipping. Nothing about the dump itself changed.
+
+**Why this is the better shape regardless:** the destination is no longer the
+server's business. Anything that can make an HTTP request with a header can
+keep the backups — a scheduled task on a PC, a machine at home, a CI job —
+and none of them has to be reachable from the internet. Dropping the file in
+a folder a cloud drive already syncs makes it off-site with no API, no key and
+no storage account.
+
+**The R2 push stays.** It is written and tested, it is inert without its
+credentials, and it is there the day a bucket exists. Deleting working code to
+make a point would have cost more than keeping it.
+
+**`scripts/pull-backup.ps1`** is what runs on Windows Task Scheduler: fetches,
+writes `notex-<stamp>Z.json.gz` into a folder you choose, keeps the newest N
+and deletes the rest. It retries while Render's free instance wakes up,
+refuses a file whose first two bytes are not gzip's `1f 8b` (so an HTML error
+page from a proxy is never mistaken for a backup), prunes only files matching
+its own name pattern, and exits non-zero so a failure shows up as a failed
+task rather than a backup that silently never happened.
+
+**How verified:** 2 new server tests (the file comes back gzipped with its
+counts header and the right filename; the cron key is required and a
+signed-in user cannot pull it either; and it works with no bucket configured,
+since that is the whole point) — 78 server tests in all, run sequentially.
+The script itself was run against a stub: the 401 path reports the key
+mismatch, the success path writes a file that unzips to the backup JSON, and
+pruning with `-Keep 3` removed the two oldest while leaving a newest three and
+an unrelated file alone. Run against the live server it returned 404, which is
+correct — the endpoint had not deployed yet.
+
+**Next:** set the scheduled task up, then the image-size wins, trash/restore,
+offline sync, images to R2 last.

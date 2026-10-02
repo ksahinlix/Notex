@@ -984,19 +984,31 @@ Everything lives in one Neon database, so once a day the server writes a copy
 of it somewhere else.
 
 ```
-cron-job.org ──POST /api/backup──▶ server ──┬── reads notes, users,
- (x-cron-key: CRON_SECRET)                  │   protected_folders,
-                                            │   todo_folders, shares
-                                            ├── JSON.stringify → gzip
-                                            └── PUT ──▶ Cloudflare R2
-                                                 notex/2026/notex-20261002T030000Z.json.gz
+                    reads notes, users, protected_folders,
+                    todo_folders, shares → JSON → gzip
+                                  │
+Task Scheduler ──GET /api/backup──┤                    ← what we use
+ (x-cron-key: CRON_SECRET)        │   ...and saves it into a synced folder
+                                  │
+cron-job.org ───POST /api/backup──┘   ...or the server PUTs it to R2
+ (same header)                            notex/2026/notex-20261002T030000Z.json.gz
 ```
 
-- **Why R2 and not a machine at home.** A home server would have to be on,
-  reachable from the internet and remembered. The Cloudflare account and the
-  scheduler already existed, R2's free tier is 10 GB with no charge for
-  getting data back out, and it is where images will live when they leave the
-  notes table.
+- **Two directions, one dump.** `GET` hands the file to whoever asked, so the
+  destination is not the server's business; `POST` has the server push it into
+  a Cloudflare R2 bucket. Same bytes either way.
+- **Why we pull.** R2 was the first choice — the Cloudflare account and the
+  scheduler already existed — until enabling R2 turned out to want a payment
+  method on file, free tier or not. Pulling needs no storage account at all:
+  anything that can make an HTTP request with a header can keep the backups,
+  and none of them has to be reachable from the internet. Dropping the file in
+  a folder OneDrive already syncs makes it off-site for nothing. The push code
+  stays, tested and inert, for the day a bucket exists.
+- **What runs:** `scripts/pull-backup.ps1` on Windows Task Scheduler. It
+  retries while Render's free instance wakes up, refuses anything whose first
+  two bytes are not gzip's `1f 8b` (an HTML error page from a proxy is never
+  mistaken for a backup), prunes only files matching its own naming, and exits
+  non-zero so a failure is a failed task rather than silence.
 - **Locked folders survive it.** `cipher` is copied exactly as stored and the
   `protected_folders` row (salt, iterations, check value) travels with it, so
   the same password opens a restored copy. The server never had the plaintext

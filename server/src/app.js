@@ -9,7 +9,7 @@ import {
 } from "./auth.js";
 import { findUser, toApiUser, upsertGoogleUser } from "./users.js";
 import { aiRouter } from "./routes/ai.js";
-import { backupRoute, exportRouter } from "./routes/backup.js";
+import { backupDownloadRoute, backupRoute, exportRouter } from "./routes/backup.js";
 import { imageProxyRouter } from "./routes/imageProxy.js";
 import { notesRouter } from "./routes/notes.js";
 import { protectedFoldersRouter } from "./routes/protectedFolders.js";
@@ -92,6 +92,7 @@ export function createApp({
   // instead of a session cookie.
   app.post("/api/reminders/due", remindersDueRoute(pool, { push, cronSecret }));
   app.post("/api/backup", backupRoute(pool, { r2, cronSecret, version: VERSION }));
+  app.get("/api/backup", backupDownloadRoute(pool, { cronSecret, version: VERSION }));
   app.use("/api", (_req, res) => res.status(404).json({ error: "not found" }));
 
   // In production the same server also serves the built web app (web/dist),
