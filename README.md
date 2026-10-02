@@ -127,24 +127,56 @@ takes up to a minute.
 ## Backups (D23)
 
 Every note, the records that reopen a locked folder, the to-do marks and the
-shares go into one gzipped JSON file in **Cloudflare R2**. Locked notes travel
-as ciphertext, so the file is useless to anyone who takes it.
+shares go into one gzipped JSON file. Locked notes travel as ciphertext, so
+the file is useless to anyone who takes it.
 
-**Setting it up**
+There are two ways to get that file, both guarded by `CRON_SECRET`:
+
+| Endpoint | What it does |
+|---|---|
+| `GET /api/backup` | hands the file over, so whatever asks keeps it. **Needs no storage account.** |
+| `POST /api/backup` | the server pushes it into a Cloudflare R2 bucket instead. |
+
+### Scheduled backup onto a machine you own (no account needed)
+
+`server/scripts/pull-backup.ps1` fetches the file, writes
+`notex-<stamp>Z.json.gz` into a folder you pick and keeps the newest N. Point
+it at a folder OneDrive or Google Drive already syncs and the copy is off-site
+with no API, no key and no storage account.
+
+```powershell
+$env:NOTEX_CRON_KEY = "<CRON_SECRET from Render>"
+cd server\scripts
+.\pull-backup.ps1 -Dir "$env:USERPROFILE\OneDrive\Notex-yedek" -Keep 60
+```
+
+Then in **Task Scheduler** -> *Create Basic Task* -> daily ->
+*Start a program*:
+
+- Program: `powershell.exe`
+- Arguments: `-ExecutionPolicy Bypass -File "C:\path\to\Notex\server\scripts\pull-backup.ps1" -Dir "C:\Users\you\OneDrive\Notex-yedek"`
+- Set `NOTEX_CRON_KEY` as a user environment variable, so the key is not in
+  the task definition.
+
+It exits non-zero on failure, so a backup that did not happen shows up as a
+failed task.
+
+### Or: the server pushes to Cloudflare R2
+
+Note that enabling R2 asks for a payment method, even though the free tier
+(10 GB) costs nothing.
 
 1. Cloudflare dashboard → **R2** → create a bucket, e.g. `notex-backups`.
 2. **R2 → Manage API tokens → Create API token**, permission *Object Read &
-   Write*, scoped to that one bucket. Note the access key id and secret —
-   the secret is shown once.
+   Write*, scoped to that one bucket. The secret is shown once.
 3. In Render, set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`
    and `R2_BUCKET`, then redeploy.
 4. In cron-job.org add a second job next to the reminders one:
-   `POST https://<your-app>/api/backup`, once a day, with the header
-   `x-cron-key: <CRON_SECRET>`. A successful run answers with the object key,
-   its size and what went into it; a failure answers 502 with R2's own
-   message, so the scheduler shows it went wrong.
-5. In the bucket's **Settings → Object lifecycle rules**, delete objects older
-   than however long you want to keep them. Nothing in the app ever deletes.
+   `POST https://<your-app>/api/backup`, once a day, header
+   `x-cron-key: <CRON_SECRET>`. Success answers with the object key and what
+   went into it; failure answers 502 with R2's own message.
+5. In the bucket's **Settings → Object lifecycle rules**, expire old objects.
+   Nothing in the app ever deletes.
 
 **Getting your own copy any time:** *Notlarını indir* at the foot of the page
 downloads your notes (yours only) as JSON.

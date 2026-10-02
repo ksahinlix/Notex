@@ -120,14 +120,24 @@ export function backupKey(takenAt = new Date(), prefix = "notex") {
 }
 
 /**
- * Builds the backup and puts it in the bucket. Gzipped, because a note's
- * images are base64 and compress to about a quarter.
+ * The backup as the bytes that get stored: gzipped, because a note's images
+ * are base64 and compress to about a quarter.
  */
-export async function runBackup(pool, r2, { takenAt = new Date(), version = null } = {}) {
+export async function backupFile(pool, { takenAt = new Date(), version = null } = {}) {
   const dump = await buildBackup(pool, { takenAt, version });
-  const body = zlib.gzipSync(Buffer.from(JSON.stringify(dump), "utf8"));
-  const key = await r2.put(backupKey(takenAt), body, "application/gzip");
-  return { key, bytes: body.length, counts: dump.counts, takenAt: dump.takenAt };
+  return {
+    key: backupKey(takenAt),
+    body: zlib.gzipSync(Buffer.from(JSON.stringify(dump), "utf8")),
+    counts: dump.counts,
+    takenAt: dump.takenAt,
+  };
+}
+
+/** Builds the backup and puts it in a bucket (the server pushes). */
+export async function runBackup(pool, r2, { takenAt = new Date(), version = null } = {}) {
+  const file = await backupFile(pool, { takenAt, version });
+  await r2.put(file.key, file.body, "application/gzip");
+  return { key: file.key, bytes: file.body.length, counts: file.counts, takenAt: file.takenAt };
 }
 
 /**

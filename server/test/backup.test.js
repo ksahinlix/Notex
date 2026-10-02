@@ -148,6 +148,31 @@ test("POST /api/backup writes one gzipped object to the bucket", async () => {
   assert.ok(uploads[0].body.length < Buffer.byteLength(JSON.stringify(back)), "gzip actually made it smaller");
 });
 
+test("GET /api/backup hands the file over, for a job that stores it itself", async () => {
+  const res = await fetch(`${base}/api/backup`, { headers: { "x-cron-key": CRON } });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("content-type"), "application/gzip");
+  assert.match(res.headers.get("content-disposition"), /attachment; filename="notex-\d{8}T\d{6}Z\.json\.gz"/);
+  assert.equal(JSON.parse(res.headers.get("x-notex-counts")).notes, 3, "it says what is inside without unzipping");
+
+  const dump = JSON.parse(zlib.gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8"));
+  assert.equal(dump.format, "notex-backup/1");
+  assert.equal(dump.scope, "all");
+  assert.equal(dump.counts.notes, 3);
+});
+
+test("GET /api/backup needs the cron key too, and works without a bucket", async () => {
+  assert.equal((await fetch(`${base}/api/backup`)).status, 401);
+  assert.equal((await kaan("GET", "/api/backup")).status, 401, "a signed-in user cannot pull it either");
+
+  // Pulling is the card-free route, so it must not depend on R2 at all.
+  const app = createApp({ pool, sessionSecret: "s", googleClientId: "c", verifyGoogle, cronSecret: CRON, r2: null });
+  const srv = app.listen(0);
+  const res = await fetch(`http://localhost:${srv.address().port}/api/backup`, { headers: { "x-cron-key": CRON } });
+  assert.equal(res.status, 200);
+  srv.close();
+});
+
 test("without a bucket configured it says so instead of failing quietly", async () => {
   const app = createApp({ pool, sessionSecret: "s", googleClientId: "c", verifyGoogle, cronSecret: CRON, r2: null });
   const srv = app.listen(0);
