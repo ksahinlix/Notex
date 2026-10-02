@@ -123,3 +123,42 @@ database instead, put `TEST_DATABASE_URL=...` in `server/.env.test`.
 
 The free service sleeps after ~15 minutes idle, so the first visit after that
 takes up to a minute.
+
+## Backups (D23)
+
+Every note, the records that reopen a locked folder, the to-do marks and the
+shares go into one gzipped JSON file in **Cloudflare R2**. Locked notes travel
+as ciphertext, so the file is useless to anyone who takes it.
+
+**Setting it up**
+
+1. Cloudflare dashboard → **R2** → create a bucket, e.g. `notex-backups`.
+2. **R2 → Manage API tokens → Create API token**, permission *Object Read &
+   Write*, scoped to that one bucket. Note the access key id and secret —
+   the secret is shown once.
+3. In Render, set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`
+   and `R2_BUCKET`, then redeploy.
+4. In cron-job.org add a second job next to the reminders one:
+   `POST https://<your-app>/api/backup`, once a day, with the header
+   `x-cron-key: <CRON_SECRET>`. A successful run answers with the object key,
+   its size and what went into it; a failure answers 502 with R2's own
+   message, so the scheduler shows it went wrong.
+5. In the bucket's **Settings → Object lifecycle rules**, delete objects older
+   than however long you want to keep them. Nothing in the app ever deletes.
+
+**Getting your own copy any time:** *Notlarını indir* at the foot of the page
+downloads your notes (yours only) as JSON.
+
+**Restoring**
+
+```bash
+cd server
+node --env-file=.env scripts/restore-backup.mjs notex-20261002T030000Z.json.gz           # shows what is in it
+node --env-file=.env scripts/restore-backup.mjs notex-20261002T030000Z.json.gz --yes     # writes it
+node scripts/restore-backup.mjs backup.json.gz --yes --database-url=postgresql://...     # somewhere else
+```
+
+Without `--yes` nothing is written. Rows are upserted inside one transaction,
+so restoring twice is the same as restoring once, and nothing is deleted:
+notes written after the backup was taken are left alone. Run `npm run migrate`
+first if the target database is empty.

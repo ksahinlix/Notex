@@ -55,6 +55,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D20 | New look: warm "paper and ink" theme, full-height sidebar on computers, tab bar + full-screen composer on phones | Active |
 | D21 | Reminder notifications by Web Push, sent by the server when an outside scheduler asks | Active |
 | D22 | A folder can be marked "to-do": every note in it gets a tick box, and ticked ones drop to the bottom | Active |
+| D23 | Backups: one gzipped JSON of everything, written to Cloudflare R2 by the same scheduler as the reminders | Active |
 
 ### D1 — Start from scratch
 - **What:** New repository structure. `docs/prototype.jsx` is kept only as a
@@ -558,6 +559,49 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 - **Revisit when:** a note should carry its own tick box into whatever folder
   it is moved to, or a to-do folder should sort by its own order rather than
   by date.
+
+### D23 — Backups to Cloudflare R2
+- **Decision:** the server writes **one gzipped JSON file** holding everything
+  needed to rebuild the database — users, live notes, `protected_folders`,
+  to-do marks and shares — to a **Cloudflare R2** bucket, driven by the same
+  outside scheduler that already sends the reminders (D21) and guarded by the
+  same `CRON_SECRET`.
+- **Why there, and not a home server:** a machine at home would have to be
+  switched on, reachable and remembered. The account and the scheduler already
+  exist, R2's free tier is 10 GB with no egress charge, and it is the same
+  storage images will want when they leave the database. Nothing of the
+  owner's has to be running.
+- **Why pull-free:** the server pushes. A home server would have had to poll
+  from behind NAT; this way there is nothing new listening anywhere.
+- **Locked notes stay locked.** `cipher` is copied exactly as it sits in the
+  database and `protected_folders` (salt, iterations, check value) comes with
+  it, so the same password opens a restored copy. The server has never had the
+  plaintext and a backup was no reason to start (D8). Anyone who steals the
+  file gets ciphertext.
+- **Deleted notes are left out.** Deleting wipes the content in the same
+  statement that sets `deleted_at`, so a tombstone would restore nothing.
+- **Never deletes, never overwrites.** Every run writes a new object named for
+  its time (`notex/2026/notex-20261002T030000Z.json.gz`, so sorting by name
+  sorts by time). Pruning is an R2 lifecycle rule, not code — a bug in the app
+  cannot eat the history.
+- **Restoring is part of the feature, not an exercise.** `restoreBackup()`
+  lives in `src/backup.js` and is what `scripts/restore-backup.mjs` runs, so
+  the tests exercise the real thing. It upserts inside one transaction: safe
+  to run twice, and it never deletes, so notes written after the backup
+  survive. The test wipes every table and rebuilds from a gzipped dump.
+- **The same dump serves the owner.** `GET /api/export`, narrowed to the
+  caller, is what *Notlarını indir* at the foot of the page downloads.
+- **Signed by hand.** R2 speaks S3, which wants AWS Signature V4. That is ~60
+  lines in `src/r2.js` rather than the AWS SDK for a single PUT, and the
+  request it builds is tested in detail because a signing mistake would
+  otherwise only appear in production.
+- **Known limit:** the dump is built in memory and stringified, so peak usage
+  is roughly twice its size. With a handful of users and mostly text that is
+  nowhere near Render's 512 MB; a notebook full of inline images would need
+  the file streamed out table by table.
+- **Revisit when:** images move out of the notes table (then the bucket holds
+  them too, and the dump shrinks), or the backup needs to cover more users
+  than fit in memory.
 
 ---
 
@@ -1782,3 +1826,58 @@ one into the group, both menu directions, and no sideways scrolling.
 
 **Next:** nothing outstanding for this feature. The open question about a note
 keeping a tick box when it leaves the folder is in the D22 section.
+
+### 2026-10-02 — Backups to Cloudflare R2 (D23, v1.9.0)
+
+**Why:** there was no backup of anything. Every note lived in one Neon
+free-tier database, and deleting a note wiped its content in the same statement
+that tombstoned it — the confirm dialog was the only thing between a misclick
+and permanent loss. Asked where the backup should live, the first idea was a
+home server; R2 won because nothing of the owner's has to be switched on, the
+Cloudflare account and the cron-job.org scheduler already exist, and it is the
+same storage images will want when they leave the database.
+
+**What runs:** `POST /api/backup`, called daily by cron-job.org with the same
+`CRON_SECRET` as the reminders, builds one gzipped JSON of every user's live
+notes, `protected_folders`, to-do marks and shares, and PUTs it to R2 as
+`notex/2026/notex-20261002T030000Z.json.gz`. Nothing is ever deleted or
+overwritten; an R2 lifecycle rule prunes, so a bug in the app cannot eat the
+history. A failure answers 502 with R2's own message, so the scheduler shows
+it rather than the backup silently never happening.
+
+**Locked folders stay locked.** `cipher` is copied verbatim and the salt,
+iterations and check value come with it, so the same password opens a restored
+copy. The file is useless to whoever takes it (D8).
+
+**Restoring is part of the feature.** `restoreBackup()` is in `src/backup.js`,
+and `scripts/restore-backup.mjs` is a thin wrapper, so the tests exercise what
+actually runs. It upserts inside one transaction — safe twice, and it never
+deletes, so notes written after the backup survive.
+
+**Also:** *Notlarını indir* at the foot of the page downloads the same dump
+narrowed to you (`GET /api/export`).
+
+**Signing R2 by hand:** R2 speaks S3, which wants AWS Signature V4 — about 60
+lines in `src/r2.js` instead of pulling in the AWS SDK for one PUT. Because a
+signing mistake would only appear in production, `test/r2.test.js` pins the
+URL, the credential scope, the signed-header list, that the payload really is
+hashed into the signature, that a different body or secret changes it, and
+that a refusal is reported with what R2 said. `host` and `content-length` are
+deliberately left to fetch.
+
+**How verified:** 17 new server tests — 11 for the backup (what goes in, what
+stays out, who may ask, the gzipped upload, and a full wipe-and-restore round
+trip plus restoring twice) and 6 for the signing. Full server suite 76/76 run
+sequentially. Web: 170 tests, and a Playwright run of the download button on
+desktop and at 360 px (9 checks: it downloads a real file with the notes in
+it, names it by date, says so, and reports a failure instead of doing
+nothing).
+
+**Not verified yet:** the signature against the real R2. The structure is
+tested but no upload has happened, because that needs the bucket and its
+credentials. The first scheduled run will say: a 200 with the object key means
+it works, a 502 carries R2's complaint.
+
+**Next:** set up the bucket, the token and the daily cron job (README has the
+steps). Then the image-size wins, trash/restore, offline sync, and images to
+R2 last.

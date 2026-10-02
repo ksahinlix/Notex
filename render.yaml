@@ -1,7 +1,7 @@
 # Render Blueprint: one free web service that serves both the API and the
 # built web app (same origin -> no CORS, strict cookies).
-# Secrets (DATABASE_URL, CLOUDFLARE_*, GOOGLE_CLIENT_ID, OWNER_EMAIL) are set in the
-# Render dashboard, never committed.
+# Secrets (DATABASE_URL, CLOUDFLARE_*, R2_*, GOOGLE_CLIENT_ID, OWNER_EMAIL) are set
+# in the Render dashboard, never committed.
 services:
   - type: web
     name: notex
@@ -35,6 +35,16 @@ services:
         sync: false
       - key: VAPID_SUBJECT
         sync: false
-      # Guards /api/reminders/due; copy it into the scheduler (cron-job.org).
+      # Guards /api/reminders/due and /api/backup; copy it into the
+      # scheduler (cron-job.org).
       - key: CRON_SECRET
         generateValue: true
+      # Backups to Cloudflare R2 (D23). Unset = no backups, nothing else changes.
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
