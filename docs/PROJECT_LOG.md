@@ -1939,5 +1939,16 @@ pruning with `-Keep 3` removed the two oldest while leaving a newest three and
 an unrelated file alone. Run against the live server it returned 404, which is
 correct — the endpoint had not deployed yet.
 
+**Restore drill on real data (same day):** the first backup the owner pulled
+(6 KB gzipped, 28 KB of JSON: 4 users, 24 notes, 2 locked folders, 3 to-do
+marks, 2 shares) was restored into a throwaway Postgres through the same
+`restoreBackup()` the script calls. Every row came back, no note ids were
+invented or lost, the locked folders kept their salt and check value so the
+password still opens them, a sha256 over every note's path, content, cipher,
+tick and reminder matched, and restoring the file a second time changed
+nothing. Worth noting the drill could not exercise encrypted *notes* — there
+are two locked folders but nothing in them at the moment — so that part is
+still only covered by the test fixtures.
+
 **Next:** set the scheduled task up, then the image-size wins, trash/restore,
 offline sync, images to R2 last.
