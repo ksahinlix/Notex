@@ -9,6 +9,7 @@ import {
 } from "./auth.js";
 import { findUser, toApiUser, upsertGoogleUser } from "./users.js";
 import { aiRouter } from "./routes/ai.js";
+import { backupRoute, exportRouter } from "./routes/backup.js";
 import { imageProxyRouter } from "./routes/imageProxy.js";
 import { notesRouter } from "./routes/notes.js";
 import { protectedFoldersRouter } from "./routes/protectedFolders.js";
@@ -29,6 +30,8 @@ export function createApp({
   secureCookies = false, webDist = null, imageProxy = {}, aiService = null, aiDailyLimit,
   // Notifications (D21): null push = the app runs without them.
   push = null, cronSecret = null,
+  // Backups (D23): null r2 = nothing is written anywhere, the rest still works.
+  r2 = null,
 }) {
   const app = express();
   app.set("trust proxy", 1); // Render sits behind a proxy; needed for req.ip / req.secure
@@ -84,9 +87,11 @@ export function createApp({
   app.use("/api/image-proxy", auth, imageProxyRouter(imageProxy));
   app.use("/api/ai", auth, aiRouter(aiService, { pool, dailyLimit: aiDailyLimit }));
   app.use("/api/push", pushRouter(pool, { push, requireAuth: auth, cronSecret }));
+  app.use("/api/export", auth, exportRouter(pool));
   // Driven by an outside scheduler, so it authenticates with a shared secret
   // instead of a session cookie.
   app.post("/api/reminders/due", remindersDueRoute(pool, { push, cronSecret }));
+  app.post("/api/backup", backupRoute(pool, { r2, cronSecret, version: VERSION }));
   app.use("/api", (_req, res) => res.status(404).json({ error: "not found" }));
 
   // In production the same server also serves the built web app (web/dist),

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { isOutdated, VERSION, versionDetail } from '../lib/version'
 import { showToast } from '../state/toast'
+import ExportButton from './ExportButton'
 
 /**
  * The version at the foot of the page. It also asks the server on load and
@@ -41,6 +42,8 @@ export default function VersionTag() {
           <button className="link" onClick={() => location.reload()}>yeni sürüm var, yenile</button>
         </>
       )}
+      {' · '}
+      <ExportButton />
     </footer>
   )
 }

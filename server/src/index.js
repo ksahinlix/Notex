@@ -3,6 +3,7 @@ import { createCloudflareAi } from "./ai/cloudflare.js";
 import { createAiService } from "./ai/service.js";
 import { createApp } from "./app.js";
 import { createPush } from "./push.js";
+import { createR2 } from "./r2.js";
 import { pool } from "./db.js";
 
 for (const name of ["SESSION_SECRET", "GOOGLE_CLIENT_ID"]) {
@@ -24,9 +25,20 @@ const push = createPush({
 if (!push) console.warn("Push disabled: VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY not set");
 if (push && !process.env.CRON_SECRET) console.warn("CRON_SECRET not set: /api/reminders/due stays closed");
 
+// Backups are optional as well: without the R2 credentials /api/backup
+// answers "not configured" and nothing else changes (D23).
+const r2 = createR2({
+  accountId: process.env.R2_ACCOUNT_ID,
+  accessKeyId: process.env.R2_ACCESS_KEY_ID,
+  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  bucket: process.env.R2_BUCKET,
+});
+if (!r2) console.warn("Backups disabled: R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_BUCKET not set");
+
 const app = createApp({
   aiService,
   push,
+  r2,
   cronSecret: process.env.CRON_SECRET || null,
   pool,
   sessionSecret: process.env.SESSION_SECRET,

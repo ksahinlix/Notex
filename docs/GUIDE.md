@@ -515,12 +515,15 @@ Notex/
 │   │   ├── db.js            the Postgres connection pool
 │   │   ├── auth.js          session cookie (sign/verify), requireAuth, Google token check
 │   │   ├── users.js         find/create users; owner takes over old notes
+│   │   ├── backup.js        builds a backup, and puts one back (D23)
+│   │   ├── r2.js            Cloudflare R2 uploads, AWS SigV4 signed by hand
 │   │   ├── routes/
 │   │   │   ├── notes.js         GET/PUT/DELETE notes, validation, storage quota
 │   │   │   ├── protectedFolders.js  locked-folder records (salt, check value)
 │   │   │   ├── shares.js        folder invitations and who accepted (D18)
 │   │   │   ├── todoFolders.js   which folders give their notes a tick box (D22)
 │   │   │   ├── push.js          notification subscriptions + the cron route (D21)
+│   │   │   ├── backup.js        POST /api/backup (cron) and GET /api/export (you)
 │   │   │   ├── ai.js            /api/ai/classify, /api/ai/search, per-user limits
 │   │   │   └── imageProxy.js    fetches web images for pasted content (SSRF-guarded)
 │   │   └── ai/
@@ -663,6 +666,8 @@ converts for display.
 | `GET/PUT/DELETE /api/protected-folders[/:pathKey]` | locked-folder records |
 | `GET/PUT/DELETE /api/todo-folders[/:pathKey]` | folders whose notes have a tick box (D22) |
 | `POST /api/todo-folders/move` | carry those marks through a rename or move |
+| `GET /api/export` | your own data as a JSON file (the download button) |
+| `POST /api/backup` | write everyone's data to R2 — scheduler only, `x-cron-key` |
 | `POST /api/ai/classify` | folder for a text |
 | `GET /api/ai/search?q=` | note ids by meaning |
 | `GET /api/image-proxy?url=` | fetch a web image for pasted content |
@@ -970,7 +975,55 @@ path_key  "Ev/Alışveriş"
 - **Reminders are not here.** They keep the ✓ on the Hatırlatmalar page, which
   understands repeats (D21), and they are not listed among the notes anyway.
 
-### 6.12 Smaller features
+### 6.12 Backups (D23)
+
+*Files: `server/src/backup.js`, `server/src/r2.js`, `server/src/routes/backup.js`,
+`server/scripts/restore-backup.mjs`, `ExportButton.tsx`.*
+
+Everything lives in one Neon database, so once a day the server writes a copy
+of it somewhere else.
+
+```
+cron-job.org ──POST /api/backup──▶ server ──┬── reads notes, users,
+ (x-cron-key: CRON_SECRET)                  │   protected_folders,
+                                            │   todo_folders, shares
+                                            ├── JSON.stringify → gzip
+                                            └── PUT ──▶ Cloudflare R2
+                                                 notex/2026/notex-20261002T030000Z.json.gz
+```
+
+- **Why R2 and not a machine at home.** A home server would have to be on,
+  reachable from the internet and remembered. The Cloudflare account and the
+  scheduler already existed, R2's free tier is 10 GB with no charge for
+  getting data back out, and it is where images will live when they leave the
+  notes table.
+- **Locked folders survive it.** `cipher` is copied exactly as stored and the
+  `protected_folders` row (salt, iterations, check value) travels with it, so
+  the same password opens a restored copy. The server never had the plaintext
+  and a backup wasn't a reason to start (D8) — the file is ciphertext to
+  whoever takes it.
+- **Deleted notes aren't in it.** Deleting wipes the content in the same
+  statement that sets `deleted_at`, so there would be nothing to restore.
+- **Nothing is ever deleted or overwritten.** Each run writes a new object
+  named for its time, so sorting by name sorts by time. Pruning is an R2
+  lifecycle rule rather than code: a bug in the app can't eat the history.
+- **Restoring is real code, not a README.** `restoreBackup()` lives next to
+  the builder and `scripts/restore-backup.mjs` just calls it, so the tests run
+  what you would run. It upserts in one transaction — safe to repeat — and
+  never deletes, so notes written after the backup are left alone. The test
+  truncates every table and rebuilds from a gzipped dump.
+- **Signing R2 by hand** (`r2.js`): R2 speaks S3, which wants AWS Signature
+  V4 — a hash of the request, a signing key walked through date/region/service,
+  and an `Authorization` header naming which headers were signed. That is ~60
+  lines, which beat adding the AWS SDK for one PUT. Since a mistake here would
+  only show up in production, `test/r2.test.js` checks the request in detail.
+- **The same dump, narrowed to you**, is what *Notlarını indir* at the foot of
+  the page downloads (`GET /api/export`).
+- **Known limit:** the dump is built in memory, so peak usage is about twice
+  its size. Fine for a handful of users writing mostly text; a notebook full
+  of inline images would need it streamed table by table.
+
+### 6.13 Smaller features
 
 - **Layout** (D20, `NotesPage.tsx`, bottom of `index.css`): on computers a
   full-height sidebar (logo, Yeni not, Notlar/Hatırlatmalar, folders, account)
@@ -1018,6 +1071,9 @@ path_key  "Ev/Alışveriş"
 | SSRF via the image proxy | private-address checks on every hop | `imageProxy.js` |
 | Using up shared free tiers | 150 AI calls/day, 40/min, 50 MB per user | `routes/ai.js`, `notes.js` |
 | Leaked secrets | `.env` git-ignored; secrets only in Render; rotate if shared | `.gitignore` |
+| Losing everything (deleted row, lapsed account) | a daily copy in another company's storage, kept until a lifecycle rule prunes it | `backup.js`, D23 |
+| A stolen backup file | locked notes are ciphertext in it too; the R2 token is scoped to one bucket | `backup.js`, D8 |
+| Anyone triggering a backup | `CRON_SECRET`, not a session — a signed-in user can't either | `routes/backup.js` |
 
 ---
 
