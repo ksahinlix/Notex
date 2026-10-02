@@ -1,9 +1,43 @@
 // Image helpers (browser only).
 // Images are shrunk before saving: they are stored inline as data URLs for now
-// (see PROJECT_LOG "Open questions"), and Neon's free tier has 0.5 GB.
+// (see PROJECT_LOG "Open questions"), and Neon's free tier has 0.5 GB. Inline
+// means every image rides along in every GET /api/notes, so what they weigh
+// is what the app costs to open.
 
 const MAX_SIDE = 1600
-const JPEG_QUALITY = 0.82
+/** Resizing a photo already threw most of the detail away; 0.85 is plenty. */
+const QUALITY = 0.85
+/**
+ * An image that already fitted is usually a screenshot or a diagram, where
+ * lossy artefacts show on text, so those are encoded more carefully.
+ */
+const QUALITY_UNSCALED = 0.92
+/** Above this an animated GIF rides along in every load, so a still is taken. */
+const MAX_GIF = 2_000_000
+
+let webpSupport: boolean | null = null
+/** Every current browser can write WebP from a canvas; Safari before 14 cannot. */
+function webpSupported(): boolean {
+  if (webpSupport === null) {
+    const c = document.createElement('canvas')
+    c.width = c.height = 1
+    webpSupport = c.toDataURL('image/webp').startsWith('data:image/webp')
+  }
+  return webpSupport
+}
+
+/** The size an image is stored at: never wider or taller than `max`. */
+export function fitted(width: number, height: number, max = MAX_SIDE) {
+  const scale = Math.min(1, max / Math.max(width, height))
+  return { width: Math.round(width * scale), height: Math.round(height * scale), scaled: scale < 1 }
+}
+
+/**
+ * Whichever data URL is shorter. Re-encoding can make a small flat image
+ * *bigger* (a two-colour PNG beats any lossy codec), and what matters is the
+ * number of characters stored, not the file on disk.
+ */
+export const smaller = (a: string, b: string) => (b.length < a.length ? b : a)
 
 function readAsDataUrl(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -14,23 +48,37 @@ function readAsDataUrl(file: Blob): Promise<string> {
   })
 }
 
-/** File/Blob -> data URL, downscaled to at most 1600px and re-encoded as JPEG (PNG/GIF kept if small). */
+/**
+ * File/Blob -> data URL, no larger than 1600px and re-encoded as WebP (JPEG
+ * where WebP cannot be written). The result is only kept if it is actually
+ * smaller than what came in, so this never makes an image heavier.
+ */
 export async function fileToDataUrl(file: Blob): Promise<string> {
   const original = await readAsDataUrl(file)
-  if (file.type === 'image/gif' || file.type === 'image/svg+xml') return original
+  // SVG is text, usually tiny, and rasterising it would only make it worse.
+  if (file.type === 'image/svg+xml') return original
+  // A GIF keeps its animation unless it is big enough to hurt every load.
+  if (file.type === 'image/gif' && file.size <= MAX_GIF) return original
+
   const img = new Image()
   img.src = original
   await img.decode()
-  const scale = Math.min(1, MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight))
-  if (scale === 1 && file.size < 300_000) return original
+  const { width, height, scaled } = fitted(img.naturalWidth, img.naturalHeight)
+  const webp = webpSupported()
+  // Without WebP the fallback is JPEG, which has no transparency. Rather than
+  // flatten a small transparent PNG onto white, leave it exactly as it was.
+  if (!webp && !scaled && file.size < 300_000) return original
+
   const canvas = document.createElement('canvas')
-  canvas.width = Math.round(img.naturalWidth * scale)
-  canvas.height = Math.round(img.naturalHeight * scale)
+  canvas.width = width
+  canvas.height = height
   const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = '#fff' // JPEG has no transparency
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-  return canvas.toDataURL('image/jpeg', JPEG_QUALITY)
+  if (!webp) {
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, width, height)
+  }
+  ctx.drawImage(img, 0, 0, width, height)
+  return smaller(original, canvas.toDataURL(webp ? 'image/webp' : 'image/jpeg', scaled ? QUALITY : QUALITY_UNSCALED))
 }
 
 /**

@@ -622,9 +622,13 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 
 ## 3. Open questions
 
-- **Images:** inline base64 in note content for now (up to 10 MB per request).
-  Plan: move to a separate table or object storage (e.g. Cloudflare R2 free
-  tier), encrypted in the browser for protected folders.
+- **Images:** inline base64 in note content for now (up to 10 MB per request),
+  shrunk to 1600 px WebP on the way in. Inline means every image is downloaded
+  again on every app open, so the remaining fix is structural: move them to a
+  separate table or object storage (e.g. Cloudflare R2), encrypted in the
+  browser for protected folders. The other lever left is `MAX_SIDE`: 1280
+  instead of 1600 is about 30% smaller again, at the cost of detail when an
+  image is opened full-screen.
 - **Rich-text editor:** `web/src/components/RichEditor.tsx` is a small
   contentEditable editor (text + images only) using `document.execCommand`,
   which is deprecated but still supported everywhere. Consider TipTap or
@@ -1952,3 +1956,59 @@ still only covered by the test fixtures.
 
 **Next:** set the scheduled task up, then the image-size wins, trash/restore,
 offline sync, images to R2 last.
+
+### 2026-10-02 — Images weigh less (v1.11.0)
+
+**Why:** images are stored inline as base64 inside a note's content, so every
+one of them is downloaded again on every app open. What they weigh is what the
+app costs to open, not just what it costs to store.
+
+**What changed** in `web/src/lib/images.ts`:
+
+1. **WebP instead of JPEG** (0.85). It also keeps transparency, so the white
+   rectangle JPEG needed is now painted only on the fallback path.
+2. **The 300 KB bypass is gone.** An image that already fitted inside 1600 px
+   was stored exactly as it arrived if it was under 300 KB — which is precisely
+   what a pasted screenshot is, and the commonest image in this app. Those are
+   re-encoded now, at a higher quality (0.92, since lossy artefacts show on
+   text) than photos get.
+3. **Whichever is smaller wins.** The re-encode is kept only if it is shorter
+   than what came in, so storing an image can never make it bigger. This
+   matters: an 8×8 flat PNG is 170 characters and beats any WebP container.
+4. A GIF over 2 MB now has its first frame taken rather than riding along
+   animated in every load. Smaller GIFs keep their animation; SVG is left
+   alone entirely, being text and usually tiny.
+
+**Measured in Chromium** (data URL length, which is what is actually stored):
+
+| | source PNG | old (JPEG 0.82) | new (WebP) | |
+|---|---|---|---|---|
+| photo 2400×1600 | 6774 KB | 192 KB | **168 KB** | −12% |
+| screenshot 900×600 | 101 KB | 111 KB | **66 KB** | −35% against what was really stored |
+| icon 64×64 transparent | 2210 ch | — | 2103 ch | and keeps its alpha |
+| 8×8 flat | 170 ch | — | **170 ch** | original kept; WebP would be 759 |
+
+The screenshot row is the real win, and note the old JPEG column is *larger*
+than the source PNG — re-encoding it would have been worse, which is why the
+bypass existed and why "keep the smaller" is the right rule rather than
+"always re-encode".
+
+**Honest about the photo number:** I had guessed images would roughly halve.
+For photos it is 12%, because the old path already downscaled and JPEG'd them;
+the only big lever left there is `MAX_SIDE`. Measured on the same image:
+1600 px → 166 KB, 1280 px → 119 KB, 1024 px → 60 KB. That is a quality
+decision, not a bug, so it was left at 1600 for the owner to choose.
+
+**How verified:** 9 new unit tests for the arithmetic (`fitted`, `smaller`,
+`imageFilesFrom`) — canvas does not exist in jsdom, so the encoding itself
+cannot be unit-tested — plus 13 Playwright checks that push real PNGs through
+the app's own paste/attach path and measure what reaches `PUT /api/notes`:
+the photo is WebP, resized to 1600×1067 and smaller than the old JPEG; the
+screenshot is no longer waved through; a transparent PNG comes back with
+corner alpha 0 rather than white; the 8×8 is stored byte for byte; and for all
+four, what is stored is never longer than what came in. 179 web tests, 78
+server tests.
+
+**Next:** trash/restore, then offline sync, then images out of the notes table
+(the structural fix — compression only goes so far while every image is
+re-downloaded on every load).
