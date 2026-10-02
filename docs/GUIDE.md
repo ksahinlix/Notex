@@ -518,6 +518,9 @@ Notex/
 │   │   ├── routes/
 │   │   │   ├── notes.js         GET/PUT/DELETE notes, validation, storage quota
 │   │   │   ├── protectedFolders.js  locked-folder records (salt, check value)
+│   │   │   ├── shares.js        folder invitations and who accepted (D18)
+│   │   │   ├── todoFolders.js   which folders give their notes a tick box (D22)
+│   │   │   ├── push.js          notification subscriptions + the cron route (D21)
 │   │   │   ├── ai.js            /api/ai/classify, /api/ai/search, per-user limits
 │   │   │   └── imageProxy.js    fetches web images for pasted content (SSRF-guarded)
 │   │   └── ai/
@@ -551,6 +554,7 @@ Notex/
         │   ├── format.ts        date formatting
         │   ├── google.ts        loads Google's sign-in script
         │   ├── sharing.ts       shared folders: grouping, invite links
+        │   ├── todo.ts          to-do folders: which notes get a tick box (D22)
         │   ├── theme.ts         Sistem/Açık/Koyu: save, load, apply
         │   └── tour.ts          guided tour steps
         ├── state/           app-wide state
@@ -610,7 +614,10 @@ day, calls                 text_hash, vector REAL[1024]
 
 - **Folders are not a table.** A folder exists because notes have that
   `path`. The tree is computed in the browser (`lib/tree.ts`). Moving a folder
-  = changing the `path` of its notes.
+  = changing the `path` of its notes. Two small tables do hang off a folder
+  path rather than off a note: `protected_folders` (its password material) and
+  `todo_folders` (`user_id`, `path_key` — the folders whose notes have a tick
+  box, D22). Both have to be carried along by hand when a folder is renamed.
 - **Soft delete ("tombstone").** Deleting sets `deleted_at` and wipes the
   content, so other devices learn about the deletion (D9).
 - **What stays readable on the server for locked notes:** the folder path,
@@ -654,6 +661,8 @@ converts for display.
 | `PUT /api/notes/:id` | create or replace one note (last-write-wins) |
 | `DELETE /api/notes/:id` | tombstone |
 | `GET/PUT/DELETE /api/protected-folders[/:pathKey]` | locked-folder records |
+| `GET/PUT/DELETE /api/todo-folders[/:pathKey]` | folders whose notes have a tick box (D22) |
+| `POST /api/todo-folders/move` | carry those marks through a rename or move |
 | `POST /api/ai/classify` | folder for a text |
 | `GET /api/ai/search?q=` | note ids by meaning |
 | `GET /api/image-proxy?url=` | fetch a web image for pasted content |
@@ -921,7 +930,47 @@ never leaves the browser, so the other person would see only ciphertext), a
 note **cannot change owner** (write it in the shared folder rather than moving
 it there), and **everyone invited may edit** — there is no read-only role yet.
 
-### 6.11 Smaller features
+### 6.11 To-do folders (D22)
+
+*Files: `server/src/routes/todoFolders.js`, `lib/todo.ts`, `state/store.ts`,
+`Sidebar.tsx`, `NoteCard.tsx`, `NotesPage.tsx`.*
+
+A note used to be tickable only if you pressed the list button while writing
+it. That is the wrong moment to decide, so the setting moved **onto the
+folder**: its ⋯ menu has **"Yapılacaklar klasörü yap"**, and from then on every
+note in it — the ones already there too — shows a tick box. Subfolders inherit
+it, like a locked folder covering what is inside it.
+
+```
+todo_folders
+────────────
+user_id ──▶ users       the OWNER of the folder, nobody else
+path_key  "Ev/Alışveriş"
+(primary key: user_id + path_key)
+```
+
+- **Why the server and not the browser:** because it is a row, the setting
+  follows you to your phone, and the people the folder is shared with (D18)
+  see the same tick boxes — a shared shopping list is one list, not two.
+- **Who may change it:** only the owner. `GET /api/todo-folders` returns your
+  own marks **plus** the ones on folders shared with you, each saying whose it
+  is (`ownerId`), so your "Alışveriş" and a friend's stay apart — the same
+  rule as D18.
+- **Nothing is written to the notes.** `lib/todo.ts` decides per note:
+  `isCheckable(note, marks, userId)` is true if it was written as a list item
+  *or* a mark of its owner covers its path. Unmark the folder and the boxes
+  are simply gone; `checked` stays as it was, in case it is marked again.
+- **Ticked notes drop to the bottom** of the list, under a folded
+  **"Tamamlananlar (n)"** heading (`splitDone` in `lib/todo.ts`,
+  `.done-group` in `index.css`), so what is left to do is what you see.
+- **Renaming or moving the folder** carries the mark along, like a share:
+  the browser updates its own copy with `movedTodoFolders` and tells the
+  server with `POST /api/todo-folders/move`, which matches the folder itself
+  and what is inside it only ("Yaşamtarzı" is not inside "Yaşam").
+- **Reminders are not here.** They keep the ✓ on the Hatırlatmalar page, which
+  understands repeats (D21), and they are not listed among the notes anyway.
+
+### 6.12 Smaller features
 
 - **Layout** (D20, `NotesPage.tsx`, bottom of `index.css`): on computers a
   full-height sidebar (logo, Yeni not, Notlar/Hatırlatmalar, folders, account)
@@ -949,8 +998,8 @@ it there), and **everyone invited may edit** — there is no read-only role yet.
 - **Dialogs and toasts** (`state/confirm.ts`, `state/toast.ts`): a tiny store
   + one host component each; any code can `await confirmDialog({...})` or
   `showToast({...})`.
-- **Comments, list items (checkbox), images on existing notes, lightbox** —
-  small additions on `NoteCard`.
+- **Comments, list items (checkbox — see also to-do folders above), images on
+  existing notes, lightbox** — small additions on `NoteCard`.
 
 ---
 

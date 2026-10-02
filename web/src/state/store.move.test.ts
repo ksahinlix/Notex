@@ -14,6 +14,10 @@ vi.mock('../lib/api', async (orig) => {
       listProtectedFolders: vi.fn(),
       listShares: vi.fn(async () => ({ mine: [], withMe: [], contacts: [] })),
       moveShares: vi.fn(async () => ({ moved: 0 })),
+      listTodoFolders: vi.fn(async () => ({ folders: [] })),
+      setTodoFolder: vi.fn(async (pathKey: string) => ({ ownerId: 'me', pathKey })),
+      unsetTodoFolder: vi.fn(async () => null),
+      moveTodoFolders: vi.fn(async () => ({ moved: 1 })),
       saveNote: vi.fn(async (n: Note) => n),
       saveProtectedFolder: vi.fn(async (f: ProtectedFolder) => f),
       deleteProtectedFolder: vi.fn(async () => null),
@@ -101,6 +105,33 @@ describe('moveFolder', () => {
     expect(moved.content).toBeNull()
     expect(JSON.stringify(moved)).not.toContain('plan metni')
     expect(s.contentOf(moved)).toEqual({ text: 'plan metni' })
+  })
+
+  it('the to-do mark follows the folder it is on (D22)', async () => {
+    m.listNotes.mockResolvedValue({ notes: [plain(['Ev', 'Alışveriş'])], serverTime: '' })
+    m.listProtectedFolders.mockResolvedValue({ folders: [] })
+    m.listTodoFolders.mockResolvedValue({ folders: [{ ownerId: 'me', pathKey: 'Ev/Alışveriş' }] })
+    const s = new NotexStore()
+    await s.load('me')
+    expect(await s.moveFolder(['Ev'], ['Yaşam'])).toEqual({ moved: 1, merged: false })
+    expect(s.getSnapshot().todoFolders).toEqual([{ ownerId: 'me', pathKey: 'Yaşam/Alışveriş' }])
+    expect(m.moveTodoFolders).toHaveBeenCalledWith(['Ev'], ['Yaşam'])
+  })
+
+  it('marking a folder is kept locally, and rolled back if the server refuses (D22)', async () => {
+    m.listNotes.mockResolvedValue({ notes: [plain(['Ev', 'Alışveriş'])], serverTime: '' })
+    m.listProtectedFolders.mockResolvedValue({ folders: [] })
+    m.listTodoFolders.mockResolvedValue({ folders: [] })
+    const s = new NotexStore()
+    await s.load('me')
+    await s.setTodoFolder(['Ev', 'Alışveriş'], true)
+    expect(s.getSnapshot().todoFolders).toEqual([{ ownerId: 'me', pathKey: 'Ev/Alışveriş' }])
+    expect(m.setTodoFolder).toHaveBeenCalledWith('Ev/Alışveriş')
+
+    m.unsetTodoFolder.mockRejectedValueOnce(new Error('offline'))
+    await s.setTodoFolder(['Ev', 'Alışveriş'], false)
+    expect(s.getSnapshot().todoFolders).toEqual([{ ownerId: 'me', pathKey: 'Ev/Alışveriş' }])
+    expect(s.getSnapshot().syncError).toContain('Yapılacaklar')
   })
 
   it('refuses nesting protected folders, and stops if a password is cancelled', async () => {

@@ -146,3 +146,15 @@ CREATE INDEX IF NOT EXISTS push_user_idx ON push_subscriptions (user_id);
 -- The occurrence we last notified about, so a reminder is not sent twice and
 -- a repeating one still fires next time.
 ALTER TABLE notes ADD COLUMN IF NOT EXISTS last_notified_at TIMESTAMPTZ;
+
+-- ---- To-do folders (D22) ------------------------------------------------
+
+-- A folder whose notes are checkable: one row per folder that is marked. It
+-- belongs to the folder's owner, and anyone the folder is shared with sees
+-- the same thing, so a shared shopping list behaves the same for everybody.
+CREATE TABLE IF NOT EXISTS todo_folders (
+  user_id    TEXT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  path_key   TEXT        NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, path_key)
+);
