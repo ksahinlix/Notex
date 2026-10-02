@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { TRASH_DAYS } from "../trash.js";
 import { canWriteNote, VISIBLE_NOTES, writableOwner } from "../shares.js";
 
 // DB row -> API object (camelCase).
@@ -26,6 +27,14 @@ export function toApi(row) {
 }
 
 const isIso = (v) => typeof v === "string" && !Number.isNaN(Date.parse(v));
+
+/**
+ * In the trash (D24): deleted, and still holding the content that makes it
+ * restorable. A tombstone whose content has been purged is not listed — there
+ * is nothing left to bring back, and the row only exists so other devices
+ * still learn about the deletion (D9).
+ */
+const IN_TRASH = `(n.deleted_at IS NOT NULL AND (n.cipher IS NOT NULL OR n.content <> '{}'::jsonb))`;
 export const REPEATS = ["daily", "weekly", "monthly", "yearly"];
 
 // Returns an error message, or null if the note body is valid.
@@ -60,10 +69,27 @@ export function notesRouter(pool) {
   r.get("/", async (req, res) => {
     const { since } = req.query;
     if (since !== undefined && !isIso(since)) return res.status(400).json({ error: "invalid since" });
-    const { rows } = since
-      ? await pool.query(`SELECT n.* FROM notes n WHERE ${VISIBLE_NOTES} AND n.updated_at > $2 ORDER BY n.updated_at`, [req.userId, since])
-      : await pool.query(`SELECT n.* FROM notes n WHERE ${VISIBLE_NOTES} AND n.deleted_at IS NULL ORDER BY n.created_at DESC`, [req.userId]);
-    res.json({ notes: rows.map(toApi), serverTime: new Date().toISOString() });
+    if (since)
+      return res.json({
+        notes: (await pool.query(`SELECT n.* FROM notes n WHERE ${VISIBLE_NOTES} AND n.updated_at > $2 ORDER BY n.updated_at`, [req.userId, since])).rows.map(toApi),
+        serverTime: new Date().toISOString(),
+      });
+    const [live, trash] = await Promise.all([
+      pool.query(`SELECT n.* FROM notes n WHERE ${VISIBLE_NOTES} AND n.deleted_at IS NULL ORDER BY n.created_at DESC`, [req.userId]),
+      // Just how many, so the sidebar can show it without the trash being
+      // loaded (its notes still carry their images).
+      pool.query(`SELECT count(*)::int AS n FROM notes n WHERE ${VISIBLE_NOTES} AND ${IN_TRASH}`, [req.userId]),
+    ]);
+    res.json({ notes: live.rows.map(toApi), trashCount: trash.rows[0].n, serverTime: new Date().toISOString() });
+  });
+
+  // GET /api/notes/trash -> what is still recoverable, newest first (D24).
+  r.get("/trash", async (req, res) => {
+    const { rows } = await pool.query(
+      `SELECT n.* FROM notes n WHERE ${VISIBLE_NOTES} AND ${IN_TRASH} ORDER BY n.deleted_at DESC`,
+      [req.userId],
+    );
+    res.json({ notes: rows.map(toApi), days: TRASH_DAYS });
   });
 
   // PUT /api/notes/:id -> create or replace (last write wins by updatedAt).
@@ -114,15 +140,43 @@ export function notesRouter(pool) {
     res.status(409).json({ error: "stale update", current: toApi(current.rows[0]) });
   });
 
-  // DELETE /api/notes/:id -> tombstone; content is wiped.
+  /** The note, if this user is allowed to change it. 404 for everything else:
+   *  never reveal that someone else has a note with this id. */
+  async function writable(req, { deleted = false } = {}) {
+    const note = (
+      await pool.query(`SELECT * FROM notes WHERE id = $1 AND deleted_at IS ${deleted ? "NOT NULL" : "NULL"}`, [req.params.id])
+    ).rows[0];
+    if (!note) return null;
+    return (await canWriteNote(pool, req.userId, note)) ? note : null;
+  }
+
+  // DELETE /api/notes/:id -> into the trash. The content stays, so it can come
+  // back; purgeTrash() wipes it after TRASH_DAYS (D24).
   r.delete("/:id", async (req, res) => {
-    const note = (await pool.query("SELECT * FROM notes WHERE id = $1 AND deleted_at IS NULL", [req.params.id])).rows[0];
+    if (!(await writable(req))) return res.status(404).end();
+    await pool.query("UPDATE notes SET deleted_at = now(), updated_at = now() WHERE id = $1", [req.params.id]);
+    res.status(204).end();
+  });
+
+  // POST /api/notes/:id/restore -> back where it was.
+  r.post("/:id/restore", async (req, res) => {
+    const note = await writable(req, { deleted: true });
     if (!note) return res.status(404).end();
-    // 404, not 403: never reveal that someone else has a note with this id.
-    if (!(await canWriteNote(pool, req.userId, note))) return res.status(404).end();
+    // Nothing is left to restore once the content has been purged.
+    if (!note.cipher && JSON.stringify(note.content) === "{}") return res.status(410).json({ error: "already purged" });
+    const { rows } = await pool.query(
+      "UPDATE notes SET deleted_at = NULL, updated_at = now() WHERE id = $1 RETURNING *",
+      [req.params.id],
+    );
+    res.json(toApi(rows[0]));
+  });
+
+  // DELETE /api/notes/:id/forever -> wipe the content now, keeping the
+  // tombstone so other devices still learn about the deletion (D9).
+  r.delete("/:id/forever", async (req, res) => {
+    if (!(await writable(req, { deleted: true }))) return res.status(404).end();
     await pool.query(
-      `UPDATE notes SET deleted_at = now(), updated_at = now(), encrypted = FALSE, cipher = NULL, content = '{}'::jsonb
-       WHERE id = $1`,
+      `UPDATE notes SET updated_at = now(), encrypted = FALSE, cipher = NULL, content = '{}'::jsonb WHERE id = $1`,
       [req.params.id],
     );
     res.status(204).end();

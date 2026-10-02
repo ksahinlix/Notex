@@ -621,8 +621,10 @@ day, calls                 text_hash, vector REAL[1024]
   path rather than off a note: `protected_folders` (its password material) and
   `todo_folders` (`user_id`, `path_key` — the folders whose notes have a tick
   box, D22). Both have to be carried along by hand when a folder is renamed.
-- **Soft delete ("tombstone").** Deleting sets `deleted_at` and wipes the
-  content, so other devices learn about the deletion (D9).
+- **Soft delete ("tombstone").** Deleting sets `deleted_at`, so other devices
+  learn about the deletion (D9). Since D24 the content stays for 30 days, so
+  the note can be restored; after that it is wiped and only the tombstone is
+  left.
 - **What stays readable on the server for locked notes:** the folder path,
   checked state and reminder time/repeat — so the tree and reminders work
   while locked. The text, reminder label, comments and images are inside
@@ -668,6 +670,10 @@ converts for display.
 | `POST /api/todo-folders/move` | carry those marks through a rename or move |
 | `GET /api/export` | your own data as a JSON file (the download button) |
 | `POST /api/backup` | write everyone's data to R2 — scheduler only, `x-cron-key` |
+| `GET /api/backup` | the same file to keep yourself — scheduler only |
+| `GET /api/notes/trash` | what is still recoverable (D24) |
+| `POST /api/notes/:id/restore` | put a deleted note back |
+| `DELETE /api/notes/:id/forever` | wipe its content now |
 | `POST /api/ai/classify` | folder for a text |
 | `GET /api/ai/search?q=` | note ids by meaning |
 | `GET /api/image-proxy?url=` | fetch a web image for pasted content |
@@ -1049,7 +1055,39 @@ cron-job.org ───POST /api/backup──┘   ...or the server PUTs it to R2
   its size. Fine for a handful of users writing mostly text; a notebook full
   of inline images would need it streamed table by table.
 
-### 6.13 Smaller features
+### 6.13 The trash (D24)
+
+*Files: `server/src/trash.js`, `server/src/routes/notes.js`, `Trash.tsx`,
+`state/store.ts`.*
+
+Deleting was the one irreversible thing in the app: the content went in the
+same statement that marked the note deleted, and a confirm dialog was the
+entire safety net. Now `deleted_at` is set and **the content stays for 30
+days**.
+
+- **Undo is the part you will use.** Deleting shows a toast with **Geri al**,
+  which calls `POST /api/notes/:id/restore`. The **Çöp kutusu** view, under
+  the folder tree, is for when the toast has gone.
+- **The row is never removed**, before or after the purge, because other
+  devices learn about a deletion from it when they sync with `?since=` (D9).
+  After 30 days the content is wiped and the tombstone stays — exactly what
+  deleting used to do immediately.
+- **Emptied by the cron that already runs.** `purgeTrash()` is called from
+  `POST /api/reminders/due`, and the response says how many it wiped, so there
+  is one scheduled job to set up rather than two.
+- **Loaded only when opened.** Deleted notes still carry their images, so the
+  trash is fetched on demand; `GET /api/notes` returns just a `trashCount` for
+  the sidebar.
+- **Who can:** anyone who could see the note sees it in the trash, and
+  restoring needs the same right as editing. So if someone deletes a note in a
+  folder you share, either of you can put it back.
+- **Locked notes** sit there as ciphertext like anywhere else, and come back
+  still encrypted. One shows its words in the trash only while its folder is
+  unlocked.
+- A note whose content has already been purged answers **410** rather than
+  coming back empty.
+
+### 6.14 Smaller features
 
 - **Layout** (D20, `NotesPage.tsx`, bottom of `index.css`): on computers a
   full-height sidebar (logo, Yeni not, Notlar/Hatırlatmalar, folders, account)
@@ -1097,7 +1135,8 @@ cron-job.org ───POST /api/backup──┘   ...or the server PUTs it to R2
 | SSRF via the image proxy | private-address checks on every hop | `imageProxy.js` |
 | Using up shared free tiers | 150 AI calls/day, 40/min, 50 MB per user | `routes/ai.js`, `notes.js` |
 | Leaked secrets | `.env` git-ignored; secrets only in Render; rotate if shared | `.gitignore` |
-| Losing everything (deleted row, lapsed account) | a daily copy in another company's storage, kept until a lifecycle rule prunes it | `backup.js`, D23 |
+| Losing everything (deleted row, lapsed account) | a daily copy kept off the server, pruned on a schedule | `backup.js`, D23 |
+| Deleting a note by mistake | it goes to the trash for 30 days, and the toast offers to undo | `trash.js`, D24 |
 | A stolen backup file | locked notes are ciphertext in it too; the R2 token is scoped to one bucket | `backup.js`, D8 |
 | Anyone triggering a backup | `CRON_SECRET`, not a session — a signed-in user can't either | `routes/backup.js` |
 

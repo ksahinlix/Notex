@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { sendDueReminders } from "../push.js";
+import { purgeTrash } from "../trash.js";
 
 /**
  * Notifications (D21): the browser asks for the public key, sends back the
@@ -70,6 +71,9 @@ export function remindersDueRoute(pool, { push, cronSecret }) {
   return async (req, res) => {
     const given = req.get("x-cron-key") ?? req.query.key;
     if (!cronSecret || given !== cronSecret) return res.status(401).json({ error: "unauthorized" });
-    res.json(await sendDueReminders(pool, push));
+    // The scheduler that already runs every few minutes is also what empties
+    // the trash (D24); one job to set up instead of two.
+    const [sent, purged] = await Promise.all([sendDueReminders(pool, push), purgeTrash(pool)]);
+    res.json({ ...sent, purged });
   };
 }

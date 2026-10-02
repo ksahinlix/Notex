@@ -34,6 +34,11 @@ export interface State {
   contacts: Person[]
   /** Folders whose notes can be ticked off, yours and the shared ones (D22). */
   todoFolders: TodoFolder[]
+  /** The trash (D24): loaded only when you open it, so its images stay out of startup. */
+  trash: Note[] | null
+  trashCount: number
+  /** How long a deleted note is kept, as the server says. */
+  trashDays: number
   /** The signed-in user, so foreign notes can be told apart. */
   userId: string | null
   /** pathKey -> folder key, only while unlocked. Never persisted. */
@@ -44,7 +49,7 @@ export interface State {
   pwdRequest: PasswordRequest | null
 }
 
-const initial: State = { loaded: false, notes: [], folders: [], shares: [], sharedWithMe: [], contacts: [], todoFolders: [], userId: null, keys: {}, plain: {}, syncError: '', pwdRequest: null }
+const initial: State = { loaded: false, notes: [], folders: [], shares: [], sharedWithMe: [], contacts: [], todoFolders: [], trash: null, trashCount: 0, trashDays: 30, userId: null, keys: {}, plain: {}, syncError: '', pwdRequest: null }
 
 const byNewest = (a: Note, b: Note) => b.createdAt.localeCompare(a.createdAt)
 
@@ -90,6 +95,7 @@ export class NotexStore {
         notes: n.notes.sort(byNewest), folders: f.folders,
         shares: s?.mine ?? [], sharedWithMe: s?.withMe ?? [], contacts: s?.contacts ?? [],
         todoFolders: t?.folders ?? [],
+        trashCount: n.trashCount ?? 0, trash: null,
         userId: userId ?? this.state.userId, loaded: true,
         syncError: s ? '' : 'Paylaşımlar yüklenemedi; kendi notların açık.',
       })
@@ -490,10 +496,70 @@ export class NotexStore {
   remove(note: Note) {
     const plain = { ...this.state.plain }
     delete plain[note.id]
-    this.set({ notes: this.state.notes.filter((n) => n.id !== note.id), plain })
+    this.set({
+      notes: this.state.notes.filter((n) => n.id !== note.id),
+      plain,
+      trashCount: this.state.trashCount + 1,
+      trash: null, // whatever we had is out of date now
+    })
     api.deleteNote(note.id).catch((e) => {
       if (!(e instanceof ApiError && e.status === 404)) this.set({ syncError: 'Not sunucudan silinemedi.' })
     })
+  }
+
+  // ---- the trash (D24) ----
+
+  /** Loads what is still recoverable. Not part of startup: these notes keep their images. */
+  async loadTrash(): Promise<boolean> {
+    try {
+      const { notes, days } = await api.listTrash()
+      this.set({ trash: notes, trashCount: notes.length, trashDays: days })
+      // A locked folder that is open should show its deleted notes too.
+      for (const n of notes) {
+        const key = this.keyIfUnlocked(n.path)
+        if (n.encrypted && key) {
+          const content = await open(n, key).catch(() => undefined)
+          if (content) this.set({ plain: { ...this.state.plain, [n.id]: content } })
+        }
+      }
+      return true
+    } catch {
+      this.set({ syncError: 'Çöp kutusu yüklenemedi.' })
+      return false
+    }
+  }
+
+  /** Puts a note back where it was. */
+  async restore(id: string): Promise<boolean> {
+    try {
+      const note = await api.restoreNote(id)
+      const key = this.keyIfUnlocked(note.path)
+      this.upsertLocal(note, note.encrypted && key ? await open(note, key).catch(() => undefined) : undefined)
+      this.set({
+        trash: this.state.trash?.filter((n) => n.id !== id) ?? null,
+        trashCount: Math.max(0, this.state.trashCount - 1),
+      })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** Wipes a deleted note's content now instead of waiting for it to age out. */
+  async purge(id: string): Promise<boolean> {
+    try {
+      await api.purgeNote(id)
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 404)) return false
+    }
+    const plain = { ...this.state.plain }
+    delete plain[id]
+    this.set({
+      trash: this.state.trash?.filter((n) => n.id !== id) ?? null,
+      trashCount: Math.max(0, this.state.trashCount - 1),
+      plain,
+    })
+    return true
   }
 }
 
