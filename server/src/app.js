@@ -13,6 +13,7 @@ import { imageProxyRouter } from "./routes/imageProxy.js";
 import { notesRouter } from "./routes/notes.js";
 import { protectedFoldersRouter } from "./routes/protectedFolders.js";
 import { sharesRouter } from "./routes/shares.js";
+import { todoFoldersRouter } from "./routes/todoFolders.js";
 import { pushRouter, remindersDueRoute } from "./routes/push.js";
 
 // Which build is running. Render sets RENDER_GIT_COMMIT on every deploy; the
@@ -79,6 +80,7 @@ export function createApp({
   app.use("/api/notes", auth, notesRouter(pool));
   app.use("/api/protected-folders", auth, protectedFoldersRouter(pool));
   app.use("/api/shares", auth, sharesRouter(pool, { findUser }));
+  app.use("/api/todo-folders", auth, todoFoldersRouter(pool));
   app.use("/api/image-proxy", auth, imageProxyRouter(imageProxy));
   app.use("/api/ai", auth, aiRouter(aiService, { pool, dailyLimit: aiDailyLimit }));
   app.use("/api/push", pushRouter(pool, { push, requireAuth: auth, cronSecret }));

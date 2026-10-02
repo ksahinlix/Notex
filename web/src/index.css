@@ -252,6 +252,18 @@ input:focus-visible, .editor:focus-visible { outline: none; }
 .comments { margin-top: 10px; padding-left: 12px; border-left: 2px solid var(--border); }
 .comment { font-size: 14px; color: var(--text-muted); padding: 4px 0; display: flex; justify-content: space-between; gap: 8px; }
 
+/* ---- To-do folders (D22): ticked notes, folded away at the foot of the list ---- */
+.done-group { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 10px; }
+.done-head {
+  display: flex; align-items: center; gap: 6px; width: 100%; margin-bottom: 10px; padding: 4px 2px;
+  background: none; border: none; font: inherit; font-size: 14px; font-weight: 600;
+  color: var(--text-muted); cursor: pointer; border-radius: 8px;
+}
+.done-head .count { margin-left: 0; }
+.done-head:hover, .done-head:focus-visible { color: var(--text); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.done-group .note { opacity: 0.72; }
+.done-group .note:hover { opacity: 1; }
+
 /* A locked folder in the list or in search results: one card per folder. */
 .locked-card {
   display: flex; align-items: center; gap: 14px; width: 100%; margin-bottom: 12px; padding: 14px 16px;

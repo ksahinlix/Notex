@@ -10,8 +10,9 @@ import { api, ApiError } from '../lib/api'
 import { createProtectedFolder, unlockFolder } from '../lib/crypto'
 import { newNote, nowIso, open, seal } from '../lib/notes'
 import { folderMoveError, pathAfterFolderMove } from '../lib/move'
+import { movedTodoFolders } from '../lib/todo'
 import { findProtectedAncestor, pathKeyOf, pathStartsWith } from '../lib/tree'
-import type { Note, NoteContent, Person, ProtectedFolder, Share } from '../lib/types'
+import type { Note, NoteContent, Person, ProtectedFolder, Share, TodoFolder } from '../lib/types'
 
 export interface PasswordRequest {
   mode: 'set' | 'unlock'
@@ -31,6 +32,8 @@ export interface State {
   sharedWithMe: Share[]
   /** People who already accepted a folder from you, to invite again in one tap (D19). */
   contacts: Person[]
+  /** Folders whose notes can be ticked off, yours and the shared ones (D22). */
+  todoFolders: TodoFolder[]
   /** The signed-in user, so foreign notes can be told apart. */
   userId: string | null
   /** pathKey -> folder key, only while unlocked. Never persisted. */
@@ -41,7 +44,7 @@ export interface State {
   pwdRequest: PasswordRequest | null
 }
 
-const initial: State = { loaded: false, notes: [], folders: [], shares: [], sharedWithMe: [], contacts: [], userId: null, keys: {}, plain: {}, syncError: '', pwdRequest: null }
+const initial: State = { loaded: false, notes: [], folders: [], shares: [], sharedWithMe: [], contacts: [], todoFolders: [], userId: null, keys: {}, plain: {}, syncError: '', pwdRequest: null }
 
 const byNewest = (a: Note, b: Note) => b.createdAt.localeCompare(a.createdAt)
 
@@ -79,11 +82,14 @@ export class NotexStore {
       // Sharing must never keep your own notes off the screen: if that call
       // fails, the app still opens with what belongs to you.
       const shares = api.listShares().catch(() => null)
+      const todo = api.listTodoFolders().catch(() => null)
       const [n, f] = await Promise.all([api.listNotes(), api.listProtectedFolders()])
       const s = await shares
+      const t = await todo
       this.set({
         notes: n.notes.sort(byNewest), folders: f.folders,
         shares: s?.mine ?? [], sharedWithMe: s?.withMe ?? [], contacts: s?.contacts ?? [],
+        todoFolders: t?.folders ?? [],
         userId: userId ?? this.state.userId, loaded: true,
         syncError: s ? '' : 'Paylaşımlar yüklenemedi; kendi notların açık.',
       })
@@ -376,6 +382,12 @@ export class NotexStore {
     }
 
     for (const r of renamed) void api.deleteProtectedFolder(r.old.pathKey).catch(() => {})
+    // The to-do mark points at a folder path too, so it follows along (D22).
+    const me = this.state.userId ?? ''
+    if (this.state.todoFolders.some((t) => t.ownerId === me && pathStartsWith(t.pathKey.split('/'), folder))) {
+      this.set({ todoFolders: movedTodoFolders(this.state.todoFolders, me, folder, newFolder) })
+      api.moveTodoFolders(folder, newFolder).catch(() => this.set({ syncError: 'Yapılacaklar klasörü ayarı taşınamadı.' }))
+    }
     // Shares point at a folder path, so they have to follow it (D18).
     if (this.state.shares.some((sh) => pathStartsWith(sh.path, folder))) {
       try {
@@ -388,11 +400,35 @@ export class NotexStore {
     return { moved: plans.length, merged }
   }
 
+  // ---- to-do folders (D22) ----
+
+  /**
+   * Marks (or unmarks) one of your folders as a to-do folder: every note in it
+   * gets a checkbox, including the ones already there. Only the owner decides,
+   * so the people you share it with see the same thing.
+   */
+  async setTodoFolder(path: string[], on: boolean) {
+    const ownerId = this.state.userId ?? ''
+    const pathKey = pathKeyOf(path)
+    const before = this.state.todoFolders
+    const without = before.filter((f) => !(f.ownerId === ownerId && f.pathKey === pathKey))
+    this.set({ todoFolders: on ? [...without, { ownerId, pathKey }] : without })
+    try {
+      if (on) await api.setTodoFolder(pathKey)
+      else await api.unsetTodoFolder(pathKey)
+    } catch {
+      this.set({ todoFolders: before, syncError: 'Yapılacaklar klasörü ayarı kaydedilemedi.' })
+    }
+  }
+
   // ---- sharing (D18) ----
 
   private async refreshShares() {
     const s = await api.listShares()
     this.set({ shares: s.mine, sharedWithMe: s.withMe, contacts: s.contacts ?? [] })
+    // Accepting or leaving a share changes which to-do folders you can see (D22).
+    const t = await api.listTodoFolders().catch(() => null)
+    if (t) this.set({ todoFolders: t.folders })
   }
 
   /** Invites someone to a folder. Returns the invite (with its link token) or an error. */

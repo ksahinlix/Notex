@@ -54,6 +54,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D19 | Someone who accepted a folder from you is not asked again for the next one | Active |
 | D20 | New look: warm "paper and ink" theme, full-height sidebar on computers, tab bar + full-screen composer on phones | Active |
 | D21 | Reminder notifications by Web Push, sent by the server when an outside scheduler asks | Active |
+| D22 | A folder can be marked "to-do": every note in it gets a tick box, and ticked ones drop to the bottom | Active |
 
 ### D1 — Start from scratch
 - **What:** New repository structure. `docs/prototype.jsx` is kept only as a
@@ -525,6 +526,38 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   of the app is unaffected.
 - **Revisit when:** notifications should be quiet at night, or a reminder
   should go only to the person who wrote it.
+
+### D22 — To-do folders
+- **Decision:** the "can be ticked off" setting lives **on the folder**, not on
+  the note. Its ⋯ menu has "Yapılacaklar klasörü yap"; after that every note
+  in it shows a tick box — the ones already there as well as new ones.
+  Subfolders inherit it, the way a protected folder covers what is inside it
+  (D8).
+- **Why the folder and not the note:** the note already had `isListItem`, set
+  once while writing, and you cannot change your mind afterwards. A shopping
+  list is a property of the list, not of each line: you decide once, and
+  everything that lands there behaves the same.
+- **Why on the server:** `todo_folders (user_id, path_key)`. Because it is
+  stored, the setting follows you to your phone, and the people the folder is
+  shared with (D18) see the same tick boxes — a shared shopping list is one
+  list, not two. Only the **owner** sets it; the invitees see it and may tick.
+  `GET /api/todo-folders` therefore returns your own marks plus the ones on
+  folders shared with you, each with whose it is, so your "Alışveriş" and
+  somebody else's stay apart (the same rule as D18).
+- **Ticked notes drop to the bottom**, under a folded "Tamamlananlar (n)"
+  heading, so the list is what is left to do. Opening it shows them, struck
+  through, and they can be un-ticked from there.
+- **What it does not change:** nothing is written to the notes. A note in a
+  to-do folder is checkable because of where it is; unmark the folder and the
+  boxes are gone, with `checked` left untouched in case it is marked again.
+  Reminders keep their own ✓ on the Hatırlatmalar page (D21) and are not
+  listed here.
+- **The mark follows the folder** when it is renamed or moved, like a share
+  (`POST /api/todo-folders/move`), matching only the folder itself and what is
+  inside it — "Yaşamtarzı" is not inside "Yaşam".
+- **Revisit when:** a note should carry its own tick box into whatever folder
+  it is moved to, or a to-do folder should sort by its own order rather than
+  by date.
 
 ---
 
@@ -1708,3 +1741,44 @@ nothing general.
 server tests. One run of the full server suite reported a failure in
 `push.test.js` that passes on its own and on a re-run — the parallel
 throwaway databases again, not the change.
+
+### 2026-10-02 — To-do folders (D22, v1.8.0)
+
+**Why:** "I want to complete option on Hatırlatmalar folder, or I want to set
+an complete action to any folder like make completable notes in this folder."
+Until now a note could only be ticked off if you had pressed the list button
+*while writing it* (`isListItem`), which is the wrong moment to decide: you
+find out a folder is a shopping list after there is already something in it.
+
+**What it does:** a folder's ⋯ menu has **"Yapılacaklar klasörü yap"**. After
+that every note in it — the ones already there as well as new ones, and
+everything in its subfolders — shows a tick box, and the row in the sidebar
+carries a small list badge. Ticked notes drop to the foot of the list under a
+folded **"Tamamlananlar (n)"** heading, so what is left to do stays on top.
+The composer's list button goes quiet in such a folder, saying the folder
+already does it.
+
+**Where it is kept:** a `todo_folders (user_id, path_key)` table, so it follows
+you to your phone, and the people the folder is shared with (D18) get the same
+tick boxes — a shared shopping list is one list. Only the owner sets the mark;
+`GET /api/todo-folders` returns your own plus the ones on folders shared with
+you, each with whose it is. It follows a rename or a move the way a share does
+(`POST /api/todo-folders/move`). Nothing is written to the notes themselves:
+unmark the folder and the boxes disappear, with `checked` left as it was.
+
+**Shape:** `server/src/routes/todoFolders.js` and
+`server/test/todoFolders.test.js` on the server; `web/src/lib/todo.ts` (the
+pure rules: which mark covers a note, the done/undone split, the mark after a
+move) with `todo.test.ts`, plus `todoFolders` in the store and the usual
+optimistic-save-then-roll-back.
+
+**How verified:** 6 new server tests (the owner marks and unmarks; nobody else
+sees it until the invitation is accepted; her own marks stay hers; a rename
+carries it, subfolders included; "Yaşamtarzı" is left alone when "Yaşam"
+moves; signed out is a 401), 10 new browser unit tests, a store test for the
+move and for the roll-back, and a Playwright run on desktop and at 360px: 24
+checks, including a note in a folder someone else marked and shared, ticking
+one into the group, both menu directions, and no sideways scrolling.
+
+**Next:** nothing outstanding for this feature. The open question about a note
+keeping a tick box when it leaves the folder is in the D22 section.

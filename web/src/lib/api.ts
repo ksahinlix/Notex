@@ -1,6 +1,6 @@
 // Thin client for the Notex server API. Cookies carry the login session.
 
-import type { Note, Person, ProtectedFolder, Share } from './types'
+import type { Note, Person, ProtectedFolder, Share, TodoFolder } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -66,6 +66,13 @@ export const api = {
   removeShare: (id: string) => request<null>('DELETE', `/api/shares/${encodeURIComponent(id)}`),
   /** Keeps shares on a folder the owner renamed or moved. */
   moveShares: (from: string[], to: string[]) => request<{ moved: number }>('POST', '/api/shares/move', { from, to }),
+
+  // Folders whose notes can be ticked off (D22). Only the owner sets the mark.
+  listTodoFolders: () => request<{ folders: TodoFolder[] }>('GET', '/api/todo-folders'),
+  setTodoFolder: (pathKey: string) => request<TodoFolder>('PUT', `/api/todo-folders/${encodeURIComponent(pathKey)}`),
+  unsetTodoFolder: (pathKey: string) => request<null>('DELETE', `/api/todo-folders/${encodeURIComponent(pathKey)}`),
+  /** Keeps the mark on a folder the owner renamed or moved. */
+  moveTodoFolders: (from: string[], to: string[]) => request<{ moved: number }>('POST', '/api/todo-folders/move', { from, to }),
 
   listProtectedFolders: () => request<{ folders: ProtectedFolder[] }>('GET', '/api/protected-folders'),
   saveProtectedFolder: (f: ProtectedFolder) =>

@@ -68,6 +68,14 @@ export interface Person {
   picture: string | null
 }
 
+/** A folder whose notes can be ticked off (D22). */
+export interface TodoFolder {
+  /** Whose folder it is: you, or the owner of a folder shared with you. */
+  ownerId: string
+  /** Path joined with "/", e.g. "Ev/Alışveriş". */
+  pathKey: string
+}
+
 export interface ProtectedFolder {
   /** Path joined with "/", e.g. "Personal/Diary". */
   pathKey: string

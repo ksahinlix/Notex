@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlarmClock, CircleHelp, FolderClosed, Loader2, Lock, LockOpen, LogOut, NotebookPen, Plus, Search, Sparkles, X } from 'lucide-react'
+import { AlarmClock, ChevronDown, ChevronRight, CircleHelp, FolderClosed, Loader2, Lock, LockOpen, LogOut, NotebookPen, Plus, Search, Sparkles, X } from 'lucide-react'
 import { clearSearchCache, useSemanticSearch } from '../ai/useAi'
 import { buildAgenda, isReminderNote } from '../lib/agenda'
 import { queryTerms } from '../lib/highlight'
 import { markTourDone, tourDone } from '../lib/tour'
 import { isSharedPath, ownNotes, sharedFolders } from '../lib/sharing'
+import { isCheckable, splitDone, todoAncestor, todoKeysOf } from '../lib/todo'
 import { folderInto, folderRenamed, noteMoveTarget } from '../lib/move'
 import { matchesQuery } from '../lib/notes'
 import { allPaths, buildTree, findProtectedAncestor, pathKeyOf, pathStartsWith } from '../lib/tree'
@@ -51,6 +52,8 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
     history.replaceState(null, '', v === 'reminders' ? '#hatirlatmalar' : location.pathname)
   }
   const [lightbox, setLightbox] = useState<string | null>(null)
+  /** "Tamamlananlar": the ticked notes at the foot of the list, folded away (D22). */
+  const [doneOpen, setDoneOpen] = useState(false)
   const [treeError, setTreeError] = useState('')
   // Guided tour: opens by itself on a user's first visit (per browser), or from the ? button.
   const [tourSeen, setTourSeen] = useState(() => tourDone(user.id))
@@ -134,6 +137,10 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
   const keywordIds = new Set(keywordHits.map((n) => n.id))
   const meaningHits = (semantic.ids ?? []).flatMap((id) => (keywordIds.has(id) ? [] : (byId.get(id) ?? [])))
   const visible = !searching ? scoped : [...keywordHits, ...meaningHits]
+  // Ticked notes drop to the bottom of the list, under "Tamamlananlar" (D22).
+  // Search results stay in their own order (relevance first).
+  const { open: openNotes, done: doneNotes } = splitDone(visible, state.todoFolders, user.id)
+  const ordered = searching ? visible : [...openNotes, ...doneNotes]
   const readerIndex = reader ? reader.list.indexOf(reader.id) : -1
   const readerNote = reader ? (byId.get(reader.id) ?? null) : null
   const readerContent = readerNote ? contentOf(readerNote) : undefined
@@ -239,6 +246,10 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
   const selProtected = !!selKey && state.folders.some((f) => f.pathKey === selKey)
   const selUnlocked = selProtected && !!state.keys[selKey!]
 
+  // To-do folders (D22): your own marks for the sidebar, every mark for the cards.
+  const todoKeys = useMemo(() => todoKeysOf(state.todoFolders, user.id), [state.todoFolders, user.id])
+  const folderIsTodo = (p: string[]) => !!todoAncestor(state.todoFolders, sharedPick?.ownerId ?? user.id, p)
+
   const listGroups = lockedGroups(visible)
   const searchLocked = searching ? [...lockedGroups(state.notes).values()] : []
 
@@ -250,7 +261,8 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
       pathOptionsId={PATH_OPTIONS_ID}
       folderPaths={paths}
       terms={searching ? terms : undefined}
-      onOpenReader={() => openReader(n.id, visible.map((x) => x.id))}
+      checkable={isCheckable(n, state.todoFolders, user.id)}
+      onOpenReader={() => openReader(n.id, ordered.map((x) => x.id))}
       onMove={(note, path, exact) => void moveNote(note, path, exact)}
       tourTarget={n.id === visible.find((x) => contentOf(x))?.id}
       onSelectPath={(p) => {
@@ -262,6 +274,14 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
       onUnlock={() => unlockNote(n)}
     />
   )
+
+  /** A list of cards, with the locked notes of one folder folded into one card. */
+  const cards = (list: Note[]) =>
+    list.map((n) => {
+      if (contentOf(n)) return card(n)
+      const g = listGroups.get(lockKeyOf(n))
+      return g && g.firstId === n.id ? <LockedCard key={`lock:${g.key}`} path={g.path} count={g.count} onUnlock={() => unlockFolder(g.key)} /> : null
+    })
 
   return (
     <div className={`app ${treeOpen ? 'tree-open' : ''} ${touring ? 'touring' : ''}`}>
@@ -331,6 +351,8 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
               keys={state.keys}
               folderPaths={paths}
               shares={state.shares}
+              todoKeys={todoKeys}
+              onToggleTodo={(p, on) => void store.setTodoFolder(p, on)}
               onSelect={(p) => {
                 setSelectedPath(p)
                 setSharedPick(null)
@@ -448,7 +470,12 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
 
           {/* One composer for both views, so a draft survives switching. */}
           <div className={`composer-slot ${searching && view === 'notes' ? 'searching' : ''}`}>
-            <Composer selectedPath={sharedPick ? sharedPick.path : selectedPath} pathOptionsId={PATH_OPTIONS_ID} sharedOwnerId={sharedPick?.ownerId} />
+            <Composer
+              selectedPath={sharedPick ? sharedPick.path : selectedPath}
+              pathOptionsId={PATH_OPTIONS_ID}
+              sharedOwnerId={sharedPick?.ownerId}
+              folderIsTodo={folderIsTodo}
+            />
           </div>
 
           {view === 'reminders' ? (
@@ -500,11 +527,18 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
               ) : visible.length === 0 ? (
                 <div className="muted empty">{state.notes.length ? 'Bu görünümde not yok.' : 'Henüz not yok. İlk notunu yaz; klasörünü AI seçsin.'}</div>
               ) : (
-                visible.map((n) => {
-                  if (contentOf(n)) return card(n)
-                  const g = listGroups.get(lockKeyOf(n))
-                  return g && g.firstId === n.id ? <LockedCard key={`lock:${g.key}`} path={g.path} count={g.count} onUnlock={() => unlockFolder(g.key)} /> : null
-                })
+                <>
+                  {cards(openNotes)}
+                  {doneNotes.length > 0 && (
+                    <div className="done-group">
+                      <button className="done-head" aria-expanded={doneOpen} onClick={() => setDoneOpen((o) => !o)}>
+                        {doneOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                        Tamamlananlar <span className="count">{doneNotes.length}</span>
+                      </button>
+                      {doneOpen && cards(doneNotes)}
+                    </div>
+                  )}
+                </>
               )}
             </section>
           )}

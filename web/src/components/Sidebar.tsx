@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, FolderInput, Lock, LockOpen, MoreHorizontal, Pencil, Plus, Users } from 'lucide-react'
+import { ChevronDown, ChevronRight, FolderInput, ListChecks, Lock, LockOpen, MoreHorizontal, Pencil, Plus, Users } from 'lucide-react'
 import { pathKeyOf, pathStartsWith, type TreeNode } from '../lib/tree'
 import { sharesForPath, shareSummary } from '../lib/sharing'
 import type { ProtectedFolder, Share } from '../lib/types'
@@ -19,6 +19,9 @@ interface Props {
   shares: Share[]
   /** All folder paths "A / B", for the folder "Taşı" menu. */
   folderPaths: string[]
+  /** pathKeys of your to-do folders, whose notes are checkable (D22). */
+  todoKeys: Set<string>
+  onToggleTodo: (path: string[], on: boolean) => void
   onSelect: (path: string[] | null) => void
   onLockClick: (path: string[]) => void
   onDropNote: (noteId: string, path: string[]) => void
@@ -96,7 +99,7 @@ export default function Sidebar({ tree, selectedPath, onSelect, ...rest }: Props
 }
 
 function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path: string[]; depth: number }) {
-  const { name, node, path, depth, selectedPath, folders, keys, shares, folderPaths, onSelect, onLockClick, onDropNote, onMoveFolder, onRenameFolder } = props
+  const { name, node, path, depth, selectedPath, folders, keys, shares, folderPaths, todoKeys, onSelect, onLockClick, onDropNote, onMoveFolder, onRenameFolder, onToggleTodo } = props
   const [open, setOpen] = useState(depth < 1)
   const [menu, setMenu] = useState<null | 'menu' | 'move' | 'rename' | 'share'>(null)
   const shared = sharesForPath(shares, path)
@@ -107,6 +110,7 @@ function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path:
   const isUnlocked = isProtected && !!keys[pk]
   const isLocked = isProtected && !isUnlocked
   const isSelected = !!selectedPath && pathKeyOf(selectedPath) === pk
+  const isTodo = todoKeys.has(pk)
   const expanded = !isLocked && (open || (!!selectedPath && selectedPath.length > path.length && pathStartsWith(selectedPath, path)))
 
   const drop = useDropTarget(
@@ -187,6 +191,7 @@ function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path:
           >
             {!isLocked && children.length ? (expanded ? <ChevronDown size={16} className="c-muted" /> : <ChevronRight size={16} className="c-muted" />) : <span style={{ width: 16, flex: 'none' }} />}
             <span className="ellipsis">{name}</span>
+            {isTodo && <ListChecks size={13} className="shared-badge" aria-label="yapılacaklar klasörü" />}
             {shared.length > 0 && <Users size={13} className="shared-badge" aria-label="paylaşılıyor" />}
           </span>
         )}
@@ -231,6 +236,15 @@ function Node(props: Omit<Props, 'tree'> & { name: string; node: TreeNode; path:
             <Pencil size={12} /> Yeniden adlandır
           </button>
           <button onClick={() => setMenu('move')}><FolderInput size={12} /> Taşı…</button>
+          <button
+            onClick={() => {
+              setMenu(null)
+              onToggleTodo(path, !isTodo)
+            }}
+            title={isTodo ? 'Notlar yine düz not olur' : 'Bu klasördeki her not işaretlenebilir olur'}
+          >
+            <ListChecks size={12} /> {isTodo ? 'Yapılacaklardan çıkar' : 'Yapılacaklar klasörü yap'}
+          </button>
           <button
             onClick={() => {
               setMenu(null)

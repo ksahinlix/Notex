@@ -18,6 +18,8 @@ interface Props {
   pathOptionsId: string
   /** Set while a folder shared with you is open: the note becomes its owner's (D18). */
   sharedOwnerId?: string
+  /** Is this folder a to-do folder, whose notes are checkable anyway (D22)? */
+  folderIsTodo: (path: string[]) => boolean
 }
 
 /** Who set the path field: AI keeps filling it until the user types or picks a folder. */
@@ -34,7 +36,7 @@ type ReminderMode = 'auto' | 'manual' | 'dismissed'
 //   reminder automatically; the clock button sets one by hand.
 // - The editor keeps pasted web content with its images, grows with the text,
 //   and has a full-screen mode for long notes.
-export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }: Props) {
+export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId, folderIsTodo }: Props) {
   const editor = useRef<RichEditorHandle>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [text, setText] = useState('')
@@ -88,6 +90,10 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
   const effectivePath = pathSource === 'ai' && result ? result.path.join(' / ') : path
   // Saving waits while the AI-controlled folder is still being decided for the current text.
   const waitingForAi = pathSource === 'ai' && category.loading
+
+  // In a to-do folder every note is checkable already, so the list button has
+  // nothing left to switch (D22).
+  const folderTodo = folderIsTodo(parsePath(effectivePath))
 
   // Reminder found in the text (recomputed only when the text changes).
   const detected = useMemo(() => parseReminder(text), [text])
@@ -268,7 +274,14 @@ export default function Composer({ selectedPath, pathOptionsId, sharedOwnerId }:
               setPathSource(e.target.value.trim() ? 'user' : 'ai')
             }}
           />
-          <button className={`btn btn-ghost ${isListItem ? 'on' : ''}`} title="Liste öğesi (işaretlenebilir)" aria-label="Liste öğesi (işaretlenebilir)" aria-pressed={isListItem} onClick={() => setIsListItem(!isListItem)}>
+          <button
+            className={`btn btn-ghost ${isListItem || folderTodo ? 'on' : ''}`}
+            title={folderTodo ? 'Yapılacaklar klasörü: notlar kendiliğinden işaretlenebilir' : 'Liste öğesi (işaretlenebilir)'}
+            aria-label="Liste öğesi (işaretlenebilir)"
+            aria-pressed={isListItem || folderTodo}
+            disabled={folderTodo}
+            onClick={() => setIsListItem(!isListItem)}
+          >
             <ListChecks size={17} />
           </button>
           <button

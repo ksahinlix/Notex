@@ -33,6 +33,8 @@ interface Props {
   tourTarget?: boolean
   onSelectPath: (path: string[]) => void
   onImageClick: (src: string) => void
+  /** Shows the tick-off box: a list item, or a note in a to-do folder (D22). */
+  checkable?: boolean
   /** Open straight in edit mode (the Reminders page edits through this card). */
   startEditing?: boolean
   /** Editing finished, saved or not. */
@@ -47,7 +49,7 @@ const draftOf = (n: Note) => ({
   reminder: n.isReminder || n.reminderAt ? { at: n.reminderAt ? new Date(n.reminderAt) : null, repeat: n.repeat ?? null } : null,
 })
 
-export default function NoteCard({ note, content, pathOptionsId, folderPaths, terms, meaningMatch, onOpenReader, onMove, tourTarget, onSelectPath, onImageClick, onUnlock, startEditing, onEditDone }: Props) {
+export default function NoteCard({ note, content, pathOptionsId, folderPaths, terms, meaningMatch, onOpenReader, onMove, tourTarget, onSelectPath, onImageClick, onUnlock, checkable, startEditing, onEditDone }: Props) {
   // startEditing: the card opens straight in edit mode. The Reminders page
   // uses it, so editing a reminder is the same editor as everywhere else.
   const [editing, setEditing] = useState(!!startEditing)
@@ -178,7 +180,7 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
             <GripVertical size={14} />
           </span>
         )}
-        {note.isListItem && (
+        {(checkable ?? note.isListItem) && (
           <button className={`checkbox ${note.checked ? 'on' : ''}`} onClick={() => store.setChecked(note, !note.checked)} aria-label="İşaretle">
             {note.checked && <Check size={14} color="var(--on-ok)" />}
           </button>
