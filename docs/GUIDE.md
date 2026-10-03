@@ -864,6 +864,16 @@ the strip (and its "Tümü" link) never disappears while reminders exist.
   would (block elements = new lines, whitespace collapsed), picks the largest
   image from `srcset`, the real one behind lazy-loading placeholders, and keeps
   **text and images in order**.
+- **Reading the editor back is not the same job.** `domToBlocks(el, undefined,
+  { pre: true })` keeps whitespace exactly as typed. The editor is
+  `white-space: pre-wrap`, so Shift+Enter puts a real newline inside a text
+  node — collapsing runs of whitespace, which is right for pasted HTML, turned
+  that line break back into a space and the second line jumped up to the
+  first. Indentation someone typed is kept for the same reason.
+- **Enter, Shift+Enter and Alt+Enter** all break the line. Chromium gives the
+  first a `<div>` and the second a newline character; the third does nothing
+  by itself, so `RichEditor` runs `insertLineBreak` for it. Ctrl/Cmd+Enter
+  still saves.
 - Each image becomes a grey placeholder, then loads **directly** or — when the
   site blocks it (CORS) — through our **`/api/image-proxy`**. **Ekle** waits
   until all images are in.

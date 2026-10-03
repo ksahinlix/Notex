@@ -44,8 +44,15 @@ export function normalizeMathUnicode(s: string): string {
   })
 }
 
-/** Walks a DOM tree and collects text and images in order. */
-export function domToBlocks(root: Node, baseUrl?: string): Block[] {
+/**
+ * Walks a DOM tree and collects text and images in order.
+ *
+ * `pre` is for our own editor rather than pasted HTML. The editor is
+ * `white-space: pre-wrap`, so Shift+Enter puts a real newline inside a text
+ * node; collapsing runs of whitespace the way a browser lays out HTML would
+ * silently turn that line break back into a space.
+ */
+export function domToBlocks(root: Node, baseUrl?: string, { pre: preRoot = false } = {}): Block[] {
   const blocks: Block[] = []
   let buffer = ''
   const flush = () => {
@@ -96,9 +103,9 @@ export function domToBlocks(root: Node, baseUrl?: string): Block[] {
     el.childNodes.forEach((c) => walk(c, pre || el.tagName === 'PRE'))
     if (isBlock) newline()
   }
-  root.childNodes.forEach((c) => walk(c))
+  root.childNodes.forEach((c) => walk(c, preRoot))
   flush()
-  return tidyBlocks(blocks)
+  return tidyBlocks(blocks, preRoot)
 }
 
 /**
@@ -106,7 +113,7 @@ export function domToBlocks(root: Node, baseUrl?: string): Block[] {
  * text block. Images are shown as their own block, so the text around them
  * needs no leading or trailing line breaks.
  */
-export function tidyBlocks(blocks: Block[]): Block[] {
+export function tidyBlocks(blocks: Block[], pre = false): Block[] {
   const merged: Block[] = []
   for (const b of blocks) {
     const last = merged[merged.length - 1]
@@ -114,7 +121,20 @@ export function tidyBlocks(blocks: Block[]): Block[] {
     else merged.push(b.type === 'text' ? { ...b } : b)
   }
   return merged
-    .map((b) => (b.type === 'text' ? { ...b, content: b.content.replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim() } : b))
+    .map((b) =>
+      b.type !== 'text'
+        ? b
+        : {
+            ...b,
+            // Pasted HTML gets squeezed: runs of spaces, the indentation that
+            // comes with wrapped source and stacks of blank lines are all
+            // noise there. What someone typed themselves is left alone apart
+            // from its ends.
+            content: pre
+              ? b.content.trim()
+              : b.content.replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim(),
+          },
+    )
     .filter((b) => b.type === 'image' || b.content !== '')
 }
 

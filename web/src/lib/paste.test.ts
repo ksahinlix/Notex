@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { blocksToText, htmlToBlocks, normalizeMathUnicode } from './paste'
+import { blocksToText, domToBlocks, htmlToBlocks, normalizeMathUnicode } from './paste'
 
 describe('htmlToBlocks', () => {
   it('keeps text and images in order', () => {
@@ -35,4 +35,45 @@ describe('htmlToBlocks', () => {
 
 it('normalizes math-styled letters', () => {
   expect(normalizeMathUnicode('𝐁𝐨𝐥𝐝 𝑖𝑡𝑎𝑙𝑖𝑐 𝟏𝟐')).toBe('Bold italic 12')
+})
+
+describe('domToBlocks in editor mode (pre)', () => {
+  const editor = (html: string) => {
+    const el = document.createElement('div')
+    el.innerHTML = html
+    return domToBlocks(el, undefined, { pre: true })
+  }
+
+  it('keeps a newline typed with Shift+Enter instead of turning it into a space', () => {
+    // The editor is white-space: pre-wrap, so the break is a real \n in a text node.
+    expect(editor('satir1\nsatir2')).toEqual([{ type: 'text', content: 'satir1\nsatir2' }])
+  })
+
+  it('still handles the <div> that plain Enter makes', () => {
+    expect(editor('satir1<div>satir2</div>')).toEqual([{ type: 'text', content: 'satir1\nsatir2' }])
+  })
+
+  it('keeps a blank line between paragraphs', () => {
+    expect(editor('bir<div><br></div><div>iki</div>')).toEqual([{ type: 'text', content: 'bir\n\niki' }])
+  })
+
+  it('keeps indentation, which pasted HTML would lose', () => {
+    expect(editor('madde\n    girintili')).toEqual([{ type: 'text', content: 'madde\n    girintili' }])
+    // The same text as pasted HTML is still squeezed.
+    const el = document.createElement('div')
+    el.innerHTML = 'madde\n    girintili'
+    expect(domToBlocks(el)).toEqual([{ type: 'text', content: 'madde girintili' }])
+  })
+
+  it('keeps images in their place among the lines', () => {
+    expect(editor('bir\niki<img src="data:image/png;base64,AAA">üç')).toEqual([
+      { type: 'text', content: 'bir\niki' },
+      { type: 'image', src: 'data:image/png;base64,AAA' },
+      { type: 'text', content: 'üç' },
+    ])
+  })
+
+  it('trims the ends but not the middle', () => {
+    expect(editor('\n\nbir\n\n\niki\n\n')).toEqual([{ type: 'text', content: 'bir\n\n\niki' }])
+  })
 })
