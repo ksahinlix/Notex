@@ -1,7 +1,30 @@
 // Shared data model. Mirrors the server's API shape (server/src/routes/*.js).
 
+/** Bold and italic, the only inline formatting kept (D27). */
+export type Mark = 'b' | 'i'
+/** A run of text inside a block that shares the same marks. */
+export interface Span {
+  text: string
+  marks?: Mark[]
+}
+export type BlockStyle = 'h1' | 'h2' | 'h3'
+export type ListKind = 'bullet' | 'number'
+
 export type Block =
-  | { type: 'text'; content: string }
+  | {
+      type: 'text'
+      /**
+       * The block's plain text, always. Search, the AI classifier and the
+       * reminder parser read this, so formatting is only ever extra (D27).
+       */
+      content: string
+      /** A heading rather than a paragraph. */
+      style?: BlockStyle
+      /** One item of a list. The marker is drawn, not stored in `content`. */
+      list?: ListKind
+      /** Bold/italic runs. Absent means the whole block is plain. */
+      spans?: Span[]
+    }
   | { type: 'image'; src: string; alt?: string }
 
 export interface Comment {

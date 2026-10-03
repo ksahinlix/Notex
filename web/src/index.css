@@ -272,6 +272,26 @@ input:focus-visible, .editor:focus-visible { outline: none; }
 .comments { margin-top: 10px; padding-left: 12px; border-left: 2px solid var(--border); }
 .comment { font-size: 14px; color: var(--text-muted); padding: 4px 0; display: flex; justify-content: space-between; gap: 8px; }
 
+/* ---- Formatting kept from a paste (D27) ----
+   Headings, list items and bold/italic. Sizes are relative to the body text so
+   the same rules work on a card and in the reader, where the font is larger. */
+.nb-head { margin: 10px 0 4px; font-family: var(--font-display); font-weight: 600; line-height: 1.25; color: var(--text); }
+.nb-head:first-child { margin-top: 0; }
+.nb-h1 { font-size: 1.35em; }
+.nb-h2 { font-size: 1.18em; }
+.nb-h3 { font-size: 1.05em; }
+.nb-item { display: flex; gap: 8px; align-items: baseline; }
+.nb-marker { flex: none; min-width: 1.1em; text-align: right; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.note-body strong { font-weight: 650; color: var(--text); }
+.note-body em { font-style: italic; }
+/* The editor shows the same shapes while you write. */
+.editor h1, .editor h2, .editor h3 { font-family: var(--font-display); font-weight: 600; margin: 8px 0 4px; line-height: 1.25; }
+.editor h1 { font-size: 1.3em; }
+.editor h2 { font-size: 1.15em; }
+.editor h3 { font-size: 1.04em; }
+.editor ul, .editor ol { margin: 4px 0; padding-left: 1.4em; }
+.editor li { margin: 2px 0; }
+
 /* ---- Flags on notes (D26) ----
    Each flag carries only a hue; the theme decides lightness, so the chips stay
    readable in both themes (the lesson from the shared faces in D20). */

@@ -67,8 +67,16 @@ export function withText(content: NoteContent, text: string): NoteContent {
   return { ...content, text, blocks: buildBlocks(text, imagesOf(content)) }
 }
 
+/**
+ * Adds images to a note, keeping its text exactly as it is. Rebuilding the
+ * blocks from `content.text` would be simpler but would throw away any
+ * headings, lists and bold runs the note has (D27).
+ */
 export function withImages(content: NoteContent, images: string[]): NoteContent {
-  return { ...content, blocks: buildBlocks(content.text, [...imagesOf(content), ...images]) }
+  const existing = content.blocks?.length ? content.blocks : buildBlocks(content.text, [])
+  const text = existing.filter((b) => b.type !== 'image')
+  const all = [...imagesOf(content), ...images].map((src) => ({ type: 'image' as const, src }))
+  return { ...content, blocks: [...text, ...all] }
 }
 
 /** Case-insensitive search over text, list text, comments and path. */
