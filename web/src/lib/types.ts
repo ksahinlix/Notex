@@ -31,6 +31,8 @@ export interface Note {
   cipher: string | null
   isListItem: boolean
   checked: boolean
+  /** Markers from a fixed set (D26): 'onemli', 'acil', 'beklemede', 'fikir'. */
+  flags?: string[]
   reminderAt: string | null
   /** A reminder, with a date (reminderAt) or without one. */
   isReminder?: boolean

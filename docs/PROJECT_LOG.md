@@ -58,6 +58,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D23 | Backups: one gzipped JSON of everything, fetched or pushed on a schedule, to storage that needs no account | Active |
 | D24 | Deleting puts a note in the trash for 30 days instead of wiping it; the existing cron does the emptying | Active |
 | D25 | A long note is clipped to ten lines in the list; clicking a note opens it, with its comment box ready | Active |
+| D26 | Notes carry flags from a fixed set of four, stored in plaintext, and the sidebar filters by them | Active |
 
 ### D1 — Start from scratch
 - **What:** New repository structure. `docs/prototype.jsx` is kept only as a
@@ -688,6 +689,37 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   focus, because comments come in twos and threes.
 - **Revisit when:** ten lines is the wrong number, or opening should remember
   itself across reloads.
+
+### D26 — Flags on notes
+- **Decision:** a note may carry any of **four fixed flags** — Önemli, Acil,
+  Beklemede, Fikir — set from the card's ⋯ menu, shown as coloured chips, and
+  used by the sidebar to filter.
+- **Fixed, not free labels.** Free tags need managing: renaming, merging,
+  typos, a list that grows until it means nothing. Four known words need none
+  of that, and each can have its own colour, its own row and a count.
+- **Not "Bitti".** It was in the original shortlist and was dropped: beside a
+  to-do folder's tick box (D22) a note flagged "done" but unticked says two
+  contradictory things. "Fikir" took its place.
+- **Stored in plaintext**, in a `TEXT[]` column beside `checked` and
+  `reminder_at`, not inside `cipher`. A flag is one of four known words, not
+  the note's words, so this leaks nothing — and it means a note in a locked
+  folder can still be marked and filtered without unlocking it, which is the
+  same trade already made for the folder path and reminder times (D8).
+- **Leaving `flags` out of a PUT keeps what is there**, while `[]` clears
+  them. Everything else in a note replaces on write (D9), but the app is a
+  PWA: a tab running a build from before flags existed would otherwise wipe
+  them on every edit. Absent and empty are distinguishable, so this costs
+  nothing.
+- **A flag cuts across folders**, so choosing one in the sidebar looks at
+  everything of yours and clears the folder selection; choosing a folder
+  clears the flag.
+- **Validated in one place** (`validateNote`), so an unknown flag is a 400
+  rather than something the browser has to cope with later. The browser
+  ignores unknown flags anyway, so an older note can never break a card.
+- **Not done yet:** the composer cannot set a flag while writing; a note is
+  flagged after it exists. Worth adding if it turns out to be the common case.
+- **Revisit when:** four is not enough, or flags need to be per-user on a
+  shared note rather than part of the note.
 
 ---
 
@@ -2228,3 +2260,49 @@ trimmed but not the middle) and 7 browser checks that type each of the three
 keys and read what reaches `PUT /api/notes`, including editing an existing
 note and that it comes back on screen as two lines. 185 web tests, 87 server
 tests.
+
+### 2026-10-03 — Flags on notes (D26, v1.14.0)
+
+**Asked for as:** "I want to add flag to notes like important there may be
+some categories." Chosen: a fixed set rather than free labels, with filtering.
+
+**What it does:** a note may carry any of **Önemli, Acil, Beklemede, Fikir**,
+set from the card's ⋯ menu, shown as coloured chips beside the folder path.
+The sidebar lists the four with counts; clicking one shows just those notes,
+across every folder, and clicking a folder clears it again.
+
+**One substitution, stated up front:** the shortlist offered was Önemli, Acil,
+Beklemede, **Bitti**. "Bitti" was dropped because beside a to-do folder's tick
+box (D22) a note flagged "done" but unticked says two contradictory things.
+"Fikir" took its place.
+
+**Stored in plaintext.** `flags TEXT[]` sits beside `checked` and
+`reminder_at`, not inside `cipher`. A flag is one of four known words, not the
+note's words, so this leaks nothing — and it means a note in a locked folder
+can still be marked and filtered without unlocking it, the same trade already
+made for the folder path and reminder times (D8).
+
+**Absent means "keep".** Everything else in a note replaces on write (D9), but
+leaving `flags` out of a `PUT` preserves what is there; `[]` still clears them.
+This is a PWA: a tab running a build from before flags existed would otherwise
+wipe them on every edit. Absent and empty are distinguishable, so the
+exception costs nothing. A test pins it.
+
+**How verified:** 7 server tests (none by default; several at once and in the
+set order; only the four are accepted, not a bare string and not the same one
+twice, with nothing written on refusal; a locked note is flagged without its
+ciphertext changing or any content appearing; `validateNote` as the one place
+that decides; a shared folder shows the owner's flags and the invitee may add
+one; and the "old client does not wipe them" rule) and 10 unit tests for the
+browser helpers, including that an unknown flag is ignored rather than
+rendered. Plus 22 Playwright checks: chips on cards in the set order, sidebar
+counts, setting and unsetting from the menu with the right body reaching
+`PUT /api/notes`, filtering across folders and clearing it, a folder clearing
+the filter, phone width, and a contrast check on the chip in dark mode
+(7.5:1). 195 web tests, 94 server tests.
+
+**Not done:** the composer cannot set a flag while writing — a note is flagged
+after it exists. Worth adding if that turns out to be the common way round.
+
+**Next:** keeping headings, lists and bold/italic when pasting, which is the
+bigger of the two and touches the editor, the reader and the block model.

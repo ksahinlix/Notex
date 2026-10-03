@@ -292,8 +292,8 @@ export class NotexStore {
     void this.push(sealed)
   }
 
-  /** Changes plaintext metadata only (reminder time, repeat, done), no re-encryption needed. */
-  updateMeta(note: Note, patch: Partial<Pick<Note, 'reminderAt' | 'isReminder' | 'repeat' | 'reminderDoneUntil' | 'checked'>>) {
+  /** Changes plaintext metadata only (reminder time, repeat, done, flags), no re-encryption needed. */
+  updateMeta(note: Note, patch: Partial<Pick<Note, 'reminderAt' | 'isReminder' | 'repeat' | 'reminderDoneUntil' | 'checked' | 'flags'>>) {
     const updated = { ...note, ...patch, updatedAt: nowIso() }
     this.upsertLocal(updated, this.contentOf(note))
     void this.push(updated)
@@ -303,6 +303,11 @@ export class NotexStore {
   completeReminder(note: Note, occurrence: Date | null) {
     if (note.repeat && occurrence) this.updateMeta(note, { reminderDoneUntil: occurrence.toISOString() })
     else this.updateMeta(note, { checked: true })
+  }
+
+  /** Flags live beside the ciphertext, so a locked note can be marked too (D26). */
+  setFlags(note: Note, flags: string[]) {
+    this.updateMeta(note, { flags })
   }
 
   setChecked(note: Note, checked: boolean) {
