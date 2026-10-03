@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Check, Clock, FolderInput, GripVertical, ImagePlus, Lock, MessageCircle, MoreHorizontal, Pencil, Sparkles, Trash2, X } from 'lucide-react'
+import { BookOpen, Check, ChevronUp, Clock, FolderInput, GripVertical, ImagePlus, Lock, MessageCircle, MoreHorizontal, Pencil, Sparkles, Trash2, X } from 'lucide-react'
 import { formatDate } from '../lib/format'
 import { repeatLabel } from '../lib/recurrence'
 import { fileToDataUrl, imageFilesFrom } from '../lib/images'
@@ -16,6 +16,7 @@ import NoteBody from './NoteBody'
 import SharedMark from './SharedMark'
 import ReminderPicker, { type ReminderChoice } from './ReminderPicker'
 import RichEditor, { type RichEditorHandle } from './RichEditor'
+import { useOverflow } from './useOverflow'
 
 interface Props {
   note: Note
@@ -61,8 +62,16 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
   const [pickerOpen, setPickerOpen] = useState(false)
   const [imagesLoading, setImagesLoading] = useState(false)
   const editorRef = useRef<RichEditorHandle>(null)
-  const [commenting, setCommenting] = useState(false)
+  // Open: the whole note is shown and its comment box is ready (D25). A long
+  // note is clipped until then, so the list stays scannable.
+  const [open, setOpen] = useState(false)
   const [comment, setComment] = useState('')
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const commentRef = useRef<HTMLInputElement>(null)
+  const clipped = useOverflow(bodyRef, !open && !editing)
+  // Whether it was clipped at the moment it was opened: a short note opened
+  // only for its comments should not offer to "show less".
+  const [wasLong, setWasLong] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const cardRef = useRef<HTMLElement>(null)
   const [moving, setMoving] = useState(false)
@@ -87,6 +96,29 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
 
   if (!content) return <LockedCard path={note.path} count={1} onUnlock={onUnlock} />
   const c = content
+
+  function openNote(focusComment = false) {
+    setWasLong(clipped)
+    setOpen(true)
+    if (focusComment) setTimeout(() => commentRef.current?.focus())
+  }
+
+  /**
+   * Clicking the note's text opens it. Buttons, links and images keep their
+   * own jobs, and a click that ends a text selection is someone copying, not
+   * someone asking to read more.
+   *
+   * Double-clicking a word opens the note as well: the first click arrives
+   * before any selection exists, and the only way round that is to delay
+   * every open by a couple of hundred milliseconds, which is a bad trade for
+   * the common case. The selection survives, so nothing is lost.
+   */
+  function openFromClick(e: React.MouseEvent) {
+    if (open || e.detail > 1) return
+    if ((e.target as HTMLElement).closest('button, a, input, textarea, img, [contenteditable]')) return
+    if (!window.getSelection()?.isCollapsed) return
+    openNote()
+  }
 
   function startEdit() {
     const d = draftOf(note)
@@ -154,7 +186,7 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
     if (!text) return
     await store.update(note, { ...c, comments: [...(c.comments ?? []), { id: newId(), text, createdAt: nowIso() }] })
     setComment('')
-    setCommenting(false)
+    commentRef.current?.focus()
   }
 
   async function addImages(files: File[]) {
@@ -257,7 +289,26 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
               </div>
             </div>
           ) : (
-            <NoteBody note={note} content={c} terms={terms} onImageClick={onImageClick} />
+            <>
+              <div ref={bodyRef} className={`note-clip ${!open ? 'collapsed' : ''} ${clipped ? 'clipped' : ''}`} onClick={openFromClick}>
+                <NoteBody note={note} content={c} terms={terms} onImageClick={onImageClick} />
+              </div>
+              {(clipped || open) && (
+                <div className="note-more">
+                  {clipped && <button className="link" onClick={() => openNote()}>Devamını oku</button>}
+                  {open && (
+                    <button className="link" onClick={() => setOpen(false)}>
+                      <ChevronUp size={13} /> {wasLong ? 'Daha az göster' : 'Kapat'}
+                    </button>
+                  )}
+                  {(clipped || wasLong) && (
+                    <button className="link" onClick={onOpenReader}>
+                      <BookOpen size={13} /> Okuma modunda aç
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
           <div className="note-meta">
@@ -272,9 +323,9 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
             ) : null}
           </div>
 
-          {!!c.comments?.length && (
+          {(open || !!c.comments?.length) && !editing && (
             <div className="comments">
-              {c.comments.map((cm) => (
+              {c.comments?.map((cm) => (
                 <div key={cm.id} className="comment">
                   <div>
                     <span className="muted small">{formatDate(cm.createdAt)}</span>
@@ -289,6 +340,21 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
                   </button>
                 </div>
               ))}
+              {open && (
+                <div className="comment-add">
+                  <input
+                    ref={commentRef}
+                    placeholder="Yorum yaz..."
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') addComment()
+                      if (e.key === 'Escape') setComment('')
+                    }}
+                  />
+                  <button className="btn btn-ghost" onClick={addComment} disabled={!comment.trim()}>Ekle</button>
+                </div>
+              )}
             </div>
           )}
 
@@ -306,21 +372,6 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
             </div>
           )}
 
-          {commenting && (
-            <div className="edit-row">
-              <input
-                autoFocus
-                placeholder="Yorumunu yaz..."
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') addComment()
-                  if (e.key === 'Escape') setCommenting(false)
-                }}
-              />
-              <button className="btn btn-primary" onClick={addComment}>Ekle</button>
-            </div>
-          )}
         </div>
 
         {!editing && (
@@ -342,7 +393,7 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
                 <button role="menuitem" className="menu-phone" onClick={() => { setMenuOpen(false); startEdit() }}><Pencil size={16} /> Düzenle</button>
                 <button role="menuitem" className="menu-phone" onClick={() => { setMenuOpen(false); setMoving(true) }}><FolderInput size={16} /> Taşı</button>
                 <button role="menuitem" onClick={() => { setMenuOpen(false); onOpenReader() }}><BookOpen size={16} /> Okuma modunda aç</button>
-                <button role="menuitem" onClick={() => { setMenuOpen(false); setCommenting(true) }}><MessageCircle size={16} /> Yorum ekle</button>
+                <button role="menuitem" onClick={() => { setMenuOpen(false); openNote(true) }}><MessageCircle size={16} /> Yorum ekle</button>
                 <button role="menuitem" onClick={() => { setMenuOpen(false); fileRef.current?.click() }}><ImagePlus size={16} /> Görsel ekle</button>
                 <button role="menuitem" className="danger" onClick={() => { setMenuOpen(false); void askDelete() }}><Trash2 size={16} /> Sil</button>
               </div>

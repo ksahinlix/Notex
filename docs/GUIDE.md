@@ -1115,8 +1115,21 @@ days**.
 - **Dialogs and toasts** (`state/confirm.ts`, `state/toast.ts`): a tiny store
   + one host component each; any code can `await confirmDialog({...})` or
   `showToast({...})`.
-- **Comments, list items (checkbox — see also to-do folders above), images on
-  existing notes, lightbox** — small additions on `NoteCard`.
+- **Long notes and comments** (D25, `NoteCard.tsx`, `useOverflow.ts`): in the
+  list a note's body is clipped to ten lines with a fade and a **Devamını
+  oku**; opening it expands the note in place and brings its comment box with
+  it, and **Okuma modunda aç** sits beside it for the full-screen reader.
+  Clicking the note's text opens it as well.
+  - Whether to clip is **measured** (`scrollHeight` vs `clientHeight`), not
+    guessed from the text length, since wrapping depends on the width, the
+    font and any images. So the height limit is always on while the note is
+    closed and the measurement only decides whether to show the fade and the
+    button — measure first and limit afterwards and the answer is always
+    "it fits".
+  - A click is ignored when it lands on a button, link, image or input, or
+    when it ends a text selection: notes are there to be copied from.
+- **List items (checkbox — see also to-do folders above), images on existing
+  notes, lightbox** — small additions on `NoteCard`.
 
 ---
 

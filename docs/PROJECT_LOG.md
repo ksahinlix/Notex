@@ -57,6 +57,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D22 | A folder can be marked "to-do": every note in it gets a tick box, and ticked ones drop to the bottom | Active |
 | D23 | Backups: one gzipped JSON of everything, fetched or pushed on a schedule, to storage that needs no account | Active |
 | D24 | Deleting puts a note in the trash for 30 days instead of wiping it; the existing cron does the emptying | Active |
+| D25 | A long note is clipped to ten lines in the list; clicking a note opens it, with its comment box ready | Active |
 
 ### D1 — Start from scratch
 - **What:** New repository structure. `docs/prototype.jsx` is kept only as a
@@ -658,6 +659,35 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   someone at quota wait for a purge.
 - **Revisit when:** 30 days is the wrong number, or the trash should be in the
   backup after all.
+
+### D25 — Open a note to read it, and to talk about it
+- **Decision:** in the list a note's body is **clipped to ten lines** with a
+  fade and a **Devamını oku**; opening it expands the note **in place** and
+  brings its **comment box** with it. **Okuma modunda aç** sits beside it for
+  the full-screen reader, which stays as it was.
+- **Clicking the note's text opens it too**, so reading more and commenting
+  are the same gesture rather than a trip through the ⋯ menu.
+- **Whether to clip is measured, not guessed.** `useOverflow` compares
+  `scrollHeight` with `clientHeight`, because wrapping depends on the window
+  width, the font and any images: counting characters is wrong on exactly the
+  notes where it matters. The height limit is therefore always on while the
+  note is closed, and the measurement only decides whether to show the fade
+  and the button — measuring first and limiting afterwards always answers
+  "it fits".
+- **Clicking must not fight text selection.** Notes are there to be copied
+  from, so a click is ignored when it lands on a button, link, image or input,
+  and when it ends a non-empty selection. Dragging to select is safe.
+  Double-clicking a word does open the note, because the first click arrives
+  before any selection exists; the only cure is delaying every open by a
+  couple of hundred milliseconds, which is a bad trade. The selection survives
+  either way, so nothing is lost.
+- **A short note says "Kapat", not "Daha az göster"**, since nothing is being
+  shown less — whether it was clipped is remembered at the moment it opens.
+- **Existing comments still show without opening**, as before; what opening
+  adds is the box to write a new one. After posting, the box stays and keeps
+  focus, because comments come in twos and threes.
+- **Revisit when:** ten lines is the wrong number, or opening should remember
+  itself across reloads.
 
 ---
 
@@ -2108,5 +2138,52 @@ really restores, the sidebar count going up and down, that the trash is
 fetched only when opened, the view with its retention line and no composer,
 restoring from the list, the confirmation before a permanent delete, and the
 `#cop` address.
+
+**Next:** offline sync, then images out of the notes table.
+
+### 2026-10-03 — Long notes fold away, and comments are one click in (D25, v1.13.0)
+
+**Why, in the owner's words:** "Read more for long notes" and "comment area
+should be default open when I click the note, not just add comment button".
+A long note pushed everything else off the screen, and leaving a comment meant
+finding it in the ⋯ menu.
+
+**What it does:** a note's body is clipped to **ten lines** with a fade and a
+**Devamını oku**. Opening it expands the note **in place** — the owner chose
+that over jumping to the reader, with a separate **Okuma modunda aç** beside
+it — and the **comment box comes with it**. Clicking the note's text opens it
+too, so reading more and commenting are one gesture.
+
+**The measurement, not a guess.** `useOverflow` compares `scrollHeight` with
+`clientHeight`, because how many lines a note takes depends on the window
+width, the font and any images. The first attempt had the height limit and the
+"is it clipped" class as the same thing, which can never be true: with no
+limit applied, nothing ever overflows, so nothing was ever clipped. The limit
+is now always on while the note is closed, and the measurement only decides
+whether to show the fade and the button.
+
+**Clicking versus copying.** Notes are there to be copied from, so a click is
+ignored when it lands on a button, link, image or input, and when it ends a
+non-empty selection — dragging to select is safe. Double-clicking a word does
+open the note: the first click arrives before any selection exists, and the
+only cure is delaying every open by a couple of hundred milliseconds, which is
+a bad trade for the common case. The selection survives, so nothing is lost.
+
+**Small things that matter:** a short note opened for its comments says
+**Kapat**, not "Daha az göster", since nothing is being shown less — whether
+it was clipped is remembered at the moment it opens. Existing comments still
+show without opening the note; what opening adds is the box to write a new
+one, which stays and keeps focus after posting, because comments come in twos
+and threes.
+
+**How verified:** 26 Playwright checks on desktop and at 360 px — a long note
+clips to about ten lines (256 px) and a short one does not; Devamını oku
+expands it in place (256 → 960 px) with the last line really there; folding
+back clips it again and takes the comment box away; clicking a note opens its
+comment box; a written comment reaches `PUT /api/notes` and appears on the
+card with the box emptied and still open; existing comments show unopened
+while the box does not; dragging to select text does not open the note; and
+the folder link still opens the folder instead. 179 web tests, 87 server
+tests.
 
 **Next:** offline sync, then images out of the notes table.

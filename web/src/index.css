@@ -249,6 +249,26 @@ input:focus-visible, .editor:focus-visible { outline: none; }
   display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; margin-top: 24px; padding: 0;
 }
 .checkbox.on { background: var(--ok); border-color: var(--ok); }
+/* ---- Long notes: clipped until asked (D25) ---- */
+.note-clip { position: relative; cursor: default; }
+/* The height limit is always on while the note is closed; `clipped` only says
+   whether anything is actually being cut off, which is what decides the fade
+   and the "Devamını oku" button. Measuring before limiting would always say
+   "fits". */
+.note-clip.collapsed {
+  max-height: calc(1.6em * 10); /* ten lines of .note-body (line-height 1.6) */
+  overflow: hidden;
+}
+.note-clip.collapsed.clipped::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2.6em; pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--surface));
+}
+.note-more { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; }
+.note-more .link { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; }
+.comment-add { display: flex; gap: 8px; padding: 6px 0 2px; }
+.comment-add input { flex: 1; min-width: 0; font-size: 14px; }
+.comment-add .btn { flex: none; }
+
 .comments { margin-top: 10px; padding-left: 12px; border-left: 2px solid var(--border); }
 .comment { font-size: 14px; color: var(--text-muted); padding: 4px 0; display: flex; justify-content: space-between; gap: 8px; }
 
