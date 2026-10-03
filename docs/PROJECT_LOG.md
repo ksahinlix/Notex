@@ -2187,3 +2187,44 @@ the folder link still opens the folder instead. 179 web tests, 87 server
 tests.
 
 **Next:** offline sync, then images out of the notes table.
+
+### 2026-10-03 — Line breaks typed in the editor survive saving (v1.13.1)
+
+**Reported as:** "if I do alt+enter on editor it goes next row but when I save
+it goes above again".
+
+**What was actually happening.** Probed in Chromium rather than guessed, and
+the three keys behave differently:
+
+| key | what the editor gets | saved |
+|---|---|---|
+| Enter | `satir1<div>satir2</div>` | correct |
+| Shift+Enter | `satir1\nsatir2` — a real newline in the text node | **lost** |
+| Alt+Enter | nothing at all | — |
+
+So the reported symptom is Shift+Enter's. The editor is `white-space:
+pre-wrap`, which is why a bare `\n` shows as a line break on screen; but
+`domToBlocks` collapses runs of whitespace the way a browser lays out HTML, so
+on the way to a block that newline became a space and the second line jumped
+up to the first. Alt+Enter never inserted anything, so whatever the owner
+pressed, one of the two was wrong.
+
+**The fix:** reading our own editor back is a different job from parsing
+pasted HTML, so `domToBlocks` takes `{ pre: true }` for it — whitespace is
+kept exactly as typed, and `tidyBlocks` only trims the ends instead of
+squeezing spaces, stripping indentation and collapsing blank lines. Pasted
+HTML still gets all of that, because there it is noise. Alt+Enter now runs
+`insertLineBreak` so it does what Shift+Enter does.
+
+**A second thing it fixes for free:** indentation someone typed used to be
+stripped (`/ *\n */g` → `\n`), so a hand-made indented list flattened on save.
+It is kept now.
+
+**How verified:** 6 new unit tests for editor-mode conversion (a Shift+Enter
+newline survives; the `<div>` from plain Enter still works; a blank line
+between paragraphs is kept; indentation is kept while the same text pasted as
+HTML is still squeezed; images stay in place among the lines; the ends are
+trimmed but not the middle) and 7 browser checks that type each of the three
+keys and read what reaches `PUT /api/notes`, including editing an existing
+note and that it comes back on screen as two lines. 185 web tests, 87 server
+tests.

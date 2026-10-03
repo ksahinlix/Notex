@@ -74,8 +74,9 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
   }
 
   useImperativeHandle(ref, () => ({
-    getBlocks: () => (el.current ? domToBlocks(el.current).filter((b) => b.type === 'text' || b.src !== PLACEHOLDER) : []),
-    getText: () => (el.current ? blocksToText(domToBlocks(el.current)) : ''),
+    getBlocks: () =>
+      el.current ? domToBlocks(el.current, undefined, { pre: true }).filter((b) => b.type === 'text' || b.src !== PLACEHOLDER) : [],
+    getText: () => (el.current ? blocksToText(domToBlocks(el.current, undefined, { pre: true })) : ''),
     clear: () => {
       el.current?.replaceChildren()
       changed()
@@ -192,9 +193,18 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
       }}
       onDragOver={(e) => e.preventDefault()}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        if (e.key !== 'Enter') return
+        if (e.ctrlKey || e.metaKey) {
           e.preventDefault()
           onSubmit?.()
+          return
+        }
+        // Shift+Enter breaks the line by itself; Alt+Enter does nothing at
+        // all in a contentEditable, so it is made to do the same thing.
+        if (e.altKey) {
+          e.preventDefault()
+          document.execCommand('insertLineBreak')
+          changed()
         }
       }}
     />
