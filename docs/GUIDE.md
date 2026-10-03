@@ -604,7 +604,7 @@ email, name,        │      path  TEXT[]  {Finans,Faturalar}         salt, iter
 picture             │      encrypted  bool                          check_cipher
                     │      content JSONB   (plain notes)            deleted_at
                     │      cipher  TEXT    (encrypted notes)        (unique per user+path)
-                    │      is_list_item, checked
+                    │      is_list_item, checked, flags[]
                     │      reminder_at, is_reminder,
                     │      reminder_repeat, reminder_done_until
                     │      created_at, updated_at, deleted_at
@@ -626,8 +626,8 @@ day, calls                 text_hash, vector REAL[1024]
   the note can be restored; after that it is wiped and only the tombstone is
   left.
 - **What stays readable on the server for locked notes:** the folder path,
-  checked state and reminder time/repeat — so the tree and reminders work
-  while locked. The text, reminder label, comments and images are inside
+  checked state, flags and reminder time/repeat — so the tree, the flag filter
+  and reminders work while locked. The text, reminder label, comments and images are inside
   `cipher`.
 
 ### The note as JSON (what the API sends)
@@ -1065,7 +1065,37 @@ cron-job.org ───POST /api/backup──┘   ...or the server PUTs it to R2
   its size. Fine for a handful of users writing mostly text; a notebook full
   of inline images would need it streamed table by table.
 
-### 6.13 The trash (D24)
+### 6.13 Flags on notes (D26)
+
+*Files: `lib/flags.ts`, `NoteCard.tsx`, `NotesPage.tsx`,
+`server/src/routes/notes.js`.*
+
+A note may carry any of four fixed flags — **Önemli, Acil, Beklemede,
+Fikir** — set from the card's ⋯ menu, shown as coloured chips, and used by the
+sidebar to filter.
+
+- **Why a fixed set rather than free tags.** Free labels need managing:
+  renaming, merging, typos, a list that grows until it means nothing. Four
+  known words need none of that, and each gets a colour, a sidebar row and a
+  count. "Bitti" was dropped from the shortlist: next to a to-do folder's tick
+  (D22) a note flagged "done" but unticked says two contradictory things.
+- **Plaintext, like `checked`.** `flags TEXT[]` sits beside the ciphertext
+  rather than inside it. A flag is one of four known words, not the note's
+  words, so a locked note can still be marked and filtered without unlocking
+  it — the same trade already made for the folder path and reminder times
+  (D8).
+- **Absent means "keep".** Leaving `flags` out of a `PUT` preserves what is
+  there; `[]` clears them. Everything else replaces on write (D9), but this is
+  a PWA, and a tab still running a build from before flags existed would
+  otherwise wipe them on every edit.
+- **Unknown flags are ignored** by `flagsOf`, so an old or odd note can never
+  break a card, while `validateNote` refuses to store one in the first place.
+- **A flag cuts across folders**, so choosing one clears the folder selection
+  and vice versa.
+- Each chip carries only a **hue**; the theme decides lightness, which is the
+  lesson from the shared-folder faces in D20.
+
+### 6.14 The trash (D24)
 
 *Files: `server/src/trash.js`, `server/src/routes/notes.js`, `Trash.tsx`,
 `state/store.ts`.*
@@ -1097,7 +1127,7 @@ days**.
 - A note whose content has already been purged answers **410** rather than
   coming back empty.
 
-### 6.14 Smaller features
+### 6.15 Smaller features
 
 - **Layout** (D20, `NotesPage.tsx`, bottom of `index.css`): on computers a
   full-height sidebar (logo, Yeni not, Notlar/Hatırlatmalar, folders, account)

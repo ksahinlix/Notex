@@ -272,6 +272,41 @@ input:focus-visible, .editor:focus-visible { outline: none; }
 .comments { margin-top: 10px; padding-left: 12px; border-left: 2px solid var(--border); }
 .comment { font-size: 14px; color: var(--text-muted); padding: 4px 0; display: flex; justify-content: space-between; gap: 8px; }
 
+/* ---- Flags on notes (D26) ----
+   Each flag carries only a hue; the theme decides lightness, so the chips stay
+   readable in both themes (the lesson from the shared faces in D20). */
+.flag-chip {
+  flex: none; font-size: 11px; font-weight: 600; letter-spacing: .01em; line-height: 1;
+  padding: 3px 7px; border-radius: 999px;
+  color: hsl(var(--flag-h) 55% 32%); background: hsl(var(--flag-h) 70% 93%);
+  border: 1px solid hsl(var(--flag-h) 55% 85%);
+}
+.flag-rows { display: flex; flex-direction: column; }
+.flag-row {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 0 10px;
+  background: none; border: none; border-radius: 8px; font: inherit; font-size: 14px;
+  color: var(--text-soft); cursor: pointer; text-align: left;
+}
+.flag-row .grow { flex: 1; }
+.flag-row:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.flag-row.on { background: hsl(var(--flag-h) 70% 94%); color: hsl(var(--flag-h) 55% 30%); font-weight: 600; }
+.flag-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: hsl(var(--flag-h) 62% 52%); }
+.menu-flags { display: flex; flex-direction: column; padding: 2px 0; margin: 2px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.menu-flags button { color: hsl(var(--flag-h) 50% 36%); }
+.menu-flags button.on { font-weight: 600; background: hsl(var(--flag-h) 70% 95%); }
+.menu-flags .menu-tick { margin-left: auto; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .flag-chip { color: hsl(var(--flag-h) 75% 78%); background: hsl(var(--flag-h) 45% 20%); border-color: hsl(var(--flag-h) 40% 32%); }
+  :root:not([data-theme='light']) .flag-row.on { background: hsl(var(--flag-h) 45% 20%); color: hsl(var(--flag-h) 75% 80%); }
+  :root:not([data-theme='light']) .menu-flags button { color: hsl(var(--flag-h) 70% 74%); }
+  :root:not([data-theme='light']) .menu-flags button.on { background: hsl(var(--flag-h) 45% 20%); }
+}
+:root[data-theme='dark'] .flag-chip { color: hsl(var(--flag-h) 75% 78%); background: hsl(var(--flag-h) 45% 20%); border-color: hsl(var(--flag-h) 40% 32%); }
+:root[data-theme='dark'] .flag-row.on { background: hsl(var(--flag-h) 45% 20%); color: hsl(var(--flag-h) 75% 80%); }
+:root[data-theme='dark'] .menu-flags button { color: hsl(var(--flag-h) 70% 74%); }
+:root[data-theme='dark'] .menu-flags button.on { background: hsl(var(--flag-h) 45% 20%); }
+
 /* ---- The trash (D24) ---- */
 .trash-row {
   display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 10px; padding: 6px 10px;

@@ -158,3 +158,12 @@ CREATE TABLE IF NOT EXISTS todo_folders (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, path_key)
 );
+
+-- ---- Flags on notes (D26) ---------------------------------------------
+
+-- A small fixed set of markers: 'onemli', 'acil', 'beklemede', 'fikir'. Kept
+-- in plaintext like `checked` and `reminder_at`, so a locked note can still be
+-- filtered and marked without unlocking it: a flag is one of four known words,
+-- not the note's content (D8).
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS flags TEXT[] NOT NULL DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS notes_flags_idx ON notes USING GIN (flags) WHERE deleted_at IS NULL;

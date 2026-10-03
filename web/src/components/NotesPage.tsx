@@ -5,6 +5,7 @@ import { buildAgenda, isReminderNote } from '../lib/agenda'
 import { queryTerms } from '../lib/highlight'
 import { markTourDone, tourDone } from '../lib/tour'
 import { isSharedPath, ownNotes, sharedFolders } from '../lib/sharing'
+import { FLAGS, flagCounts, type Flag } from '../lib/flags'
 import { isCheckable, splitDone, todoAncestor, todoKeysOf } from '../lib/todo'
 import { folderInto, folderRenamed, noteMoveTarget } from '../lib/move'
 import { matchesQuery } from '../lib/notes'
@@ -57,6 +58,8 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
   const [lightbox, setLightbox] = useState<string | null>(null)
   /** "Tamamlananlar": the ticked notes at the foot of the list, folded away (D22). */
   const [doneOpen, setDoneOpen] = useState(false)
+  /** Showing only the notes carrying one flag (D26). */
+  const [flagFilter, setFlagFilter] = useState<Flag | null>(null)
   const [treeError, setTreeError] = useState('')
   // Guided tour: opens by itself on a user's first visit (per browser), or from the ? button.
   const [tourSeen, setTourSeen] = useState(() => tourDone(user.id))
@@ -117,13 +120,18 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
 
   const scoped = useMemo(
     () =>
-      sharedPick
-        ? sharedNotes.filter((n) => !isReminderNote(n))
-        : selectedPath
-          ? plainNotes.filter((n) => pathStartsWith(n.path, selectedPath))
-          : plainNotes,
-    [plainNotes, selectedPath, sharedPick, sharedNotes],
+      // A flag cuts across folders, so picking one looks at everything of
+      // yours rather than the folder you had open.
+      flagFilter
+        ? plainNotes.filter((n) => n.flags?.includes(flagFilter))
+        : sharedPick
+          ? sharedNotes.filter((n) => !isReminderNote(n))
+          : selectedPath
+            ? plainNotes.filter((n) => pathStartsWith(n.path, selectedPath))
+            : plainNotes,
+    [plainNotes, selectedPath, sharedPick, sharedNotes, flagFilter],
   )
+  const counts = useMemo(() => flagCounts(plainNotes), [plainNotes])
   // Search covers ALL notes (not just the selected folder): notes containing
   // the words first, then notes the AI found by meaning (D15). Locked notes
   // can't be searched.
@@ -359,6 +367,7 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
               onSelect={(p) => {
                 setSelectedPath(p)
                 setSharedPick(null)
+                setFlagFilter(null)
                 setTreeOpen(false)
               }}
               onLockClick={onLockClick}
@@ -375,9 +384,32 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
               onSelect={(pick) => {
                 setSharedPick(pick)
                 if (pick) setSelectedPath(null)
+                setFlagFilter(null)
                 setTreeOpen(false)
               }}
             />
+            <div className="sb-label">İŞARETLER</div>
+            <div className="flag-rows">
+              {FLAGS.map((f) => (
+                <button
+                  key={f.id}
+                  className={`flag-row ${flagFilter === f.id ? 'on' : ''}`}
+                  style={{ '--flag-h': f.hue } as React.CSSProperties}
+                  aria-pressed={flagFilter === f.id}
+                  onClick={() => {
+                    setFlagFilter((cur) => (cur === f.id ? null : f.id))
+                    setSelectedPath(null)
+                    setSharedPick(null)
+                    setView('notes')
+                    setTreeOpen(false)
+                  }}
+                >
+                  <span className="flag-dot" aria-hidden="true" />
+                  <span className="grow">{f.label}</span>
+                  {counts[f.id] > 0 && <span className="count">{counts[f.id]}</span>}
+                </button>
+              ))}
+            </div>
             <button
               className={`trash-row ${view === 'trash' ? 'on' : ''}`}
               onClick={() => {
@@ -470,8 +502,15 @@ export default function NotesPage({ user, onLogout }: { user: User; onLogout: ()
                     <div className="page-head-main">
                       {crumbParts.length > 0 && <div className="page-crumb">{crumbParts.join(' › ')} ›</div>}
                       <div className="page-title-row">
-                        <h1 className="page-title">{headPath ? headPath[headPath.length - 1] : 'Tüm notlar'}</h1>
+                        <h1 className="page-title">
+                          {flagFilter ? (FLAGS.find((f) => f.id === flagFilter)?.label ?? 'Tüm notlar') : headPath ? headPath[headPath.length - 1] : 'Tüm notlar'}
+                        </h1>
                         <span className="page-count">{scoped.length} not</span>
+                        {flagFilter && (
+                          <button className="btn btn-ghost" onClick={() => setFlagFilter(null)}>
+                            <X size={14} /> İşareti kaldır
+                          </button>
+                        )}
                       </div>
                     </div>
                     {selectedPath && !sharedPick && (

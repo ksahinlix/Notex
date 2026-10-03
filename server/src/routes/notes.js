@@ -12,6 +12,7 @@ export function toApi(row) {
     cipher: row.cipher,
     isListItem: row.is_list_item,
     checked: row.checked,
+    flags: row.flags ?? [],
     reminderAt: row.reminder_at?.toISOString() ?? null,
     // A reminder with or without a date (reminderAt null = "undated").
     isReminder: row.is_reminder || !!row.reminder_at,
@@ -27,6 +28,9 @@ export function toApi(row) {
 }
 
 const isIso = (v) => typeof v === "string" && !Number.isNaN(Date.parse(v));
+
+/** The only flags a note may carry (D26). A fixed set, so nothing to manage. */
+export const FLAGS = ["onemli", "acil", "beklemede", "fikir"];
 
 /**
  * In the trash (D24): deleted, and still holding the content that makes it
@@ -52,6 +56,10 @@ export function validateNote(body) {
   if (body.repeat != null && body.reminderAt == null) return "a repeating reminder needs reminderAt";
   if (body.reminderDoneUntil != null && !isIso(body.reminderDoneUntil)) return "reminderDoneUntil must be an ISO date or null";
   if (body.ownerId != null && typeof body.ownerId !== "string") return "ownerId must be a string";
+  if (body.flags !== undefined) {
+    if (!Array.isArray(body.flags) || !body.flags.every((f) => FLAGS.includes(f))) return "flags must be from " + FLAGS.join(", ");
+    if (new Set(body.flags).size !== body.flags.length) return "flags must not repeat";
+  }
   if (!isIso(createdAt) || !isIso(updatedAt)) return "createdAt and updatedAt must be ISO dates";
   return null;
 }
@@ -120,19 +128,22 @@ export function notesRouter(pool) {
 
     const { rows } = await pool.query(
       `INSERT INTO notes (id, user_id, path, encrypted, content, cipher, is_list_item, checked, reminder_at, created_at, updated_at, is_reminder,
-                          reminder_repeat, reminder_done_until, author_id, deleted_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NULL)
+                          reminder_repeat, reminder_done_until, author_id, flags, deleted_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, COALESCE($16::text[], '{}'), NULL)
        ON CONFLICT (id) DO UPDATE SET
          path = EXCLUDED.path, encrypted = EXCLUDED.encrypted, content = EXCLUDED.content, cipher = EXCLUDED.cipher,
          is_list_item = EXCLUDED.is_list_item, checked = EXCLUDED.checked, reminder_at = EXCLUDED.reminder_at,
          updated_at = EXCLUDED.updated_at, is_reminder = EXCLUDED.is_reminder,
-         reminder_repeat = EXCLUDED.reminder_repeat, reminder_done_until = EXCLUDED.reminder_done_until, deleted_at = NULL
+         reminder_repeat = EXCLUDED.reminder_repeat, reminder_done_until = EXCLUDED.reminder_done_until,
+         -- Leaving flags out means "I have nothing to say about them", so a
+         -- build that predates them cannot wipe them; [] still clears them.
+         flags = COALESCE($16::text[], notes.flags), deleted_at = NULL
        -- the writer was checked above; here only a newer version may win
        WHERE notes.user_id = EXCLUDED.user_id AND notes.updated_at <= EXCLUDED.updated_at
        RETURNING *`,
       [req.params.id, owner, n.path, n.encrypted, n.encrypted ? null : n.content, n.encrypted ? n.cipher : null,
         !!n.isListItem, !!n.checked, n.reminderAt ?? null, n.createdAt, n.updatedAt, !!n.isReminder || !!n.reminderAt,
-        n.repeat ?? null, n.reminderDoneUntil ?? null, req.userId],
+        n.repeat ?? null, n.reminderDoneUntil ?? null, req.userId, n.flags ?? null],
     );
     if (rows.length) return res.json(toApi(rows[0]));
     // The server already has a newer version: tell the client which one.

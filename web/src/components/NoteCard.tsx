@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Check, ChevronUp, Clock, FolderInput, GripVertical, ImagePlus, Lock, MessageCircle, MoreHorizontal, Pencil, Sparkles, Trash2, X } from 'lucide-react'
+import { BookOpen, Check, ChevronUp, Clock, Flag, FolderInput, GripVertical, ImagePlus, Lock, MessageCircle, MoreHorizontal, Pencil, Sparkles, Trash2, X } from 'lucide-react'
+import { FLAGS, flagsOf, hasFlag, toggleFlag } from '../lib/flags'
 import { formatDate } from '../lib/format'
 import { repeatLabel } from '../lib/recurrence'
 import { fileToDataUrl, imageFilesFrom } from '../lib/images'
@@ -230,6 +231,9 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
               <span className="ellipsis">{note.path.join(' › ')}</span>
               {note.encrypted && <Lock size={12} aria-label="şifreli" />}
             </button>
+            {flagsOf(note).map((f) => (
+              <span key={f.id} className="flag-chip" style={{ '--flag-h': f.hue } as React.CSSProperties}>{f.label}</span>
+            ))}
             <SharedMark note={note} />
             {meaningMatch && (
               <span className="meaning-tag" title="Aradığın kelimeler geçmiyor ama AI konuyu ilgili buldu">
@@ -392,6 +396,21 @@ export default function NoteCard({ note, content, pathOptionsId, folderPaths, te
               <div className="note-menu card" role="menu">
                 <button role="menuitem" className="menu-phone" onClick={() => { setMenuOpen(false); startEdit() }}><Pencil size={16} /> Düzenle</button>
                 <button role="menuitem" className="menu-phone" onClick={() => { setMenuOpen(false); setMoving(true) }}><FolderInput size={16} /> Taşı</button>
+                <div className="menu-flags" role="group" aria-label="İşaretler">
+                  {FLAGS.map((f) => (
+                    <button
+                      key={f.id}
+                      role="menuitemcheckbox"
+                      aria-checked={hasFlag(note, f.id)}
+                      className={hasFlag(note, f.id) ? 'on' : ''}
+                      style={{ '--flag-h': f.hue } as React.CSSProperties}
+                      onClick={() => store.setFlags(note, toggleFlag(note, f.id))}
+                    >
+                      <Flag size={14} /> {f.label}
+                      {hasFlag(note, f.id) && <Check size={14} className="menu-tick" />}
+                    </button>
+                  ))}
+                </div>
                 <button role="menuitem" onClick={() => { setMenuOpen(false); onOpenReader() }}><BookOpen size={16} /> Okuma modunda aç</button>
                 <button role="menuitem" onClick={() => { setMenuOpen(false); openNote(true) }}><MessageCircle size={16} /> Yorum ekle</button>
                 <button role="menuitem" onClick={() => { setMenuOpen(false); fileRef.current?.click() }}><ImagePlus size={16} /> Görsel ekle</button>

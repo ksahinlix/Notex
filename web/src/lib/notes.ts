@@ -26,6 +26,7 @@ export function newNote(
     cipher: null,
     isListItem: !!meta.isListItem,
     checked: false,
+    flags: [],
     reminderAt: meta.reminderAt ?? null,
     isReminder: !!meta.isReminder || !!meta.reminderAt,
     repeat: meta.reminderAt ? (meta.repeat ?? null) : null,
