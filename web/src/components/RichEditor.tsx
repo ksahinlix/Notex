@@ -46,14 +46,7 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
   useEffect(() => {
     const root = el.current!
     root.replaceChildren()
-    for (const b of initialBlocks ?? []) {
-      if (b.type === 'image') root.appendChild(makeImg(b.src))
-      else
-        b.content.split('\n').forEach((line, i, lines) => {
-          root.appendChild(document.createTextNode(line))
-          if (i < lines.length - 1) root.appendChild(document.createElement('br'))
-        })
-    }
+    for (const b of initialBlocks ?? []) root.append(...blockNodes(b))
     if (autoFocus) focusEnd(root)
     changed()
     // Only on mount: later changes are made by the user.
@@ -93,15 +86,50 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
   /** Inserts blocks at the cursor; web images get a placeholder that is replaced once loaded. */
   function insertBlocks(blocks: Block[]) {
     const ids: [string, string][] = []
-    const html = blocks
-      .map((b) => {
-        if (b.type === 'text') return escapeHtml(normalizeMathUnicode(b.content)).replace(/\n/g, '<br>')
+    const parts: string[] = []
+    // Consecutive items of the same kind go in one list, or each would be its
+    // own and they would not read as a list.
+    let openList: 'ul' | 'ol' | null = null
+    const closeList = () => {
+      if (openList) parts.push(`</${openList}>`)
+      openList = null
+    }
+
+    for (const b of blocks) {
+      if (b.type === 'image') {
+        closeList()
         const id = `p${nextId.current++}`
         ids.push([id, b.src])
-        return `<img data-pending="${id}" class="ed-img" src="${PLACEHOLDER}" alt="">`
-      })
-      .join('') // images are block-level, so no extra line breaks around them
-    document.execCommand('insertHTML', false, html)
+        parts.push(`<img data-pending="${id}" class="ed-img" src="${PLACEHOLDER}" alt="">`)
+        continue
+      }
+      const inner = b.spans?.length
+        ? b.spans
+            .map((s) => {
+              let h = escapeHtml(normalizeMathUnicode(s.text))
+              if (s.marks?.includes('i')) h = `<em>${h}</em>`
+              if (s.marks?.includes('b')) h = `<strong>${h}</strong>`
+              return h
+            })
+            .join('')
+        : escapeHtml(normalizeMathUnicode(b.content)).replace(/\n/g, '<br>')
+
+      if (b.list) {
+        const want = b.list === 'number' ? 'ol' : 'ul'
+        if (openList !== want) {
+          closeList()
+          parts.push(`<${want}>`)
+          openList = want
+        }
+        parts.push(`<li>${inner}</li>`)
+        continue
+      }
+      closeList()
+      if (b.style) parts.push(`<${b.style}>${inner}</${b.style}>`)
+      else parts.push(`<div>${inner}</div>`)
+    }
+    closeList()
+    document.execCommand('insertHTML', false, parts.join(''))
     changed()
     for (const [id, src] of ids) {
       setBusy(1)
@@ -145,13 +173,18 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
   function handleData(dt: DataTransfer): boolean {
     const html = dt.getData('text/html')
     const files = imageFilesFrom(dt.items?.length ? dt.items : dt.files)
-    if (html && /<img/i.test(html)) {
-      // Web page / Word content with pictures: keep text and images in order.
+    if (html) {
+      // Web page / Word content: keep images, headings, lists and bold/italic
+      // in order. Anything with none of those is plain text, and goes in as
+      // plain text so pasting mid-sentence does not break the line (D27).
       const blocks = htmlToBlocks(html)
-      // A copied single image often comes both as a file and as HTML: prefer the file.
-      if (files.length && blocks.every((b) => b.type === 'image')) void insertFiles(files)
-      else insertBlocks(blocks)
-      return true
+      const structured = blocks.some((b) => b.type === 'image' || !!b.style || !!b.list || !!b.spans)
+      if (structured) {
+        // A copied single image often comes both as a file and as HTML: prefer the file.
+        if (files.length && blocks.every((b) => b.type === 'image')) void insertFiles(files)
+        else insertBlocks(blocks)
+        return true
+      }
     }
     if (files.length) {
       void insertFiles(files)
@@ -193,6 +226,13 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
       }}
       onDragOver={(e) => e.preventDefault()}
       onKeyDown={(e) => {
+        // Bold and italic by hand, since pasted ones are kept now (D27).
+        if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'b' || e.key === 'i')) {
+          e.preventDefault()
+          document.execCommand(e.key === 'b' ? 'bold' : 'italic')
+          changed()
+          return
+        }
         if (e.key !== 'Enter') return
         if (e.ctrlKey || e.metaKey) {
           e.preventDefault()
@@ -217,6 +257,47 @@ function makeImg(src: string) {
   img.src = src
   img.alt = ''
   return img
+}
+
+/** One stored block as the nodes the editor shows for it (D27). */
+function blockNodes(b: Block): Node[] {
+  if (b.type === 'image') return [makeImg(b.src)]
+
+  const inner: Node[] = []
+  if (b.spans?.length) {
+    for (const s of b.spans) {
+      let node: Node = document.createTextNode(s.text)
+      if (s.marks?.includes('i')) node = wrap('em', node)
+      if (s.marks?.includes('b')) node = wrap('strong', node)
+      inner.push(node)
+    }
+  } else {
+    // Plain text keeps its newlines: the editor is white-space: pre-wrap.
+    inner.push(document.createTextNode(b.content))
+  }
+
+  if (b.style) {
+    const h = document.createElement(b.style === 'h1' ? 'h1' : b.style === 'h2' ? 'h2' : 'h3')
+    h.append(...inner)
+    return [h]
+  }
+  if (b.list) {
+    const list = document.createElement(b.list === 'number' ? 'ol' : 'ul')
+    const li = document.createElement('li')
+    li.append(...inner)
+    list.appendChild(li)
+    return [list]
+  }
+  // A plain block is a <div> so the next one starts on its own line.
+  const div = document.createElement('div')
+  div.append(...inner)
+  return [div]
+}
+
+function wrap(tag: string, child: Node): Node {
+  const el = document.createElement(tag)
+  el.appendChild(child)
+  return el
 }
 
 function focusEnd(root: HTMLElement) {

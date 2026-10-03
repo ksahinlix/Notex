@@ -857,9 +857,17 @@ the strip (and its "Tümü" link) never disappears while reminders exist.
 *Files: `RichEditor.tsx`, `lib/paste.ts`, `lib/images.ts`,
 `server/src/routes/imageProxy.js`.*
 
-- The editor is a **contentEditable** `<div>` holding only text and `<img>`.
-  Formatting is dropped on purpose. It grows to 40% of the screen, then
-  scrolls; ⤢ gives full-screen writing.
+- The editor is a **contentEditable** `<div>` holding text, `<img>`, and the
+  formatting kept since D27: headings, list items, `<strong>` and `<em>`.
+  Everything else — links, colours, tables, fonts — is still dropped. It grows
+  to 40% of the screen, then scrolls; ⤢ gives full-screen writing.
+- **The block model** (`lib/types.ts`): a text block's `content` is always its
+  plain text, with optional `style` (h1–h3), `list` (bullet/number) and
+  `spans` (runs carrying `b`/`i`). Search, the AI classifier, the reminder
+  parser and every preview read `content`, so formatting is only ever extra —
+  and because a run of ordinary lines still merges into one block of
+  newline-separated text, every note written before D27 is already in the new
+  shape and nothing needed migrating.
 - **Paste** reads the clipboard's HTML: `htmlToBlocks` walks it like a browser
   would (block elements = new lines, whitespace collapsed), picks the largest
   image from `srcset`, the real one behind lazy-loading placeholders, and keeps
@@ -870,6 +878,9 @@ the strip (and its "Tümü" link) never disappears while reminders exist.
   node — collapsing runs of whitespace, which is right for pasted HTML, turned
   that line break back into a space and the second line jumped up to the
   first. Indentation someone typed is kept for the same reason.
+- **Ctrl/Cmd+B and Ctrl/Cmd+I** write bold and italic; numbering for ordered
+  lists is computed at render time (`lib/blocks.ts`), not stored, so a list
+  still reads 1, 2, 3 after an item is deleted.
 - **Enter, Shift+Enter and Alt+Enter** all break the line. Chromium gives the
   first a `<div>` and the second a newline character; the third does nothing
   by itself, so `RichEditor` runs `insertLineBreak` for it. Ctrl/Cmd+Enter

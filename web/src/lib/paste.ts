@@ -1,14 +1,17 @@
 // Turns HTML (pasted from a web page, Word, or our own editor) into note
-// blocks: text and images in their original order. Ported and cleaned up
-// from the prototype (docs/prototype.jsx: domToBlocks, pickImgSrc,
-// normalizeMathUnicode).
+// blocks: text and images in their original order, plus the little formatting
+// we keep — headings, list items, bold and italic (D27).
+//
+// A block's `content` is always its plain text. Search, the AI classifier and
+// the reminder parser read that, so formatting is only ever extra.
 
-import type { Block } from './types'
+import type { Block, BlockStyle, ListKind, Mark, Span } from './types'
 
 type ImageBlock = Extract<Block, { type: 'image' }>
 
 const BLOCK_TAGS = new Set(['P', 'DIV', 'LI', 'TR', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE', 'SECTION', 'ARTICLE', 'FIGURE', 'FIGCAPTION', 'UL', 'OL', 'TABLE'])
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'svg', 'SVG', 'HEAD', 'TITLE', 'META', 'LINK'])
+const HEADINGS: Record<string, BlockStyle> = { H1: 'h1', H2: 'h2', H3: 'h3', H4: 'h3', H5: 'h3', H6: 'h3' }
 
 /** Best image URL: largest srcset candidate, or the real URL behind lazy-loading placeholders. */
 export function pickImgSrc(img: Element): string {
@@ -30,7 +33,7 @@ export function pickImgSrc(img: Element): string {
 
 /** Math-styled letters (𝐀, 𝑎, 𝟏 ...) that some sites use for bold/italic -> plain letters, so search works. */
 export function normalizeMathUnicode(s: string): string {
-  return s.replace(/[\u{1D400}-\u{1D7FF}]|\u210E/gu, (ch) => {
+  return s.replace(/[\u{1D400}-\u{1D7FF}]|ℎ/gu, (ch) => {
     const cp = ch.codePointAt(0)!
     if (cp === 0x210e) return 'h'
     const ranges: [number, number, number][] = [
@@ -44,8 +47,57 @@ export function normalizeMathUnicode(s: string): string {
   })
 }
 
+/** Bold/italic from the tag, or from the inline style Google Docs and Word write. */
+function markOf(el: Element): Mark | null {
+  if (el.tagName === 'B' || el.tagName === 'STRONG') return 'b'
+  if (el.tagName === 'I' || el.tagName === 'EM') return 'i'
+  const style = (el as HTMLElement).style
+  if (style) {
+    const weight = style.fontWeight
+    if (weight === 'bold' || weight === 'bolder' || Number(weight) >= 600) return 'b'
+    if (style.fontStyle === 'italic') return 'i'
+  }
+  return null
+}
+
+/** Whether an <li> sits in a numbered list or a bulleted one. */
+function listKindOf(el: Element): ListKind {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    if (p.tagName === 'OL') return 'number'
+    if (p.tagName === 'UL') return 'bullet'
+  }
+  return 'bullet'
+}
+
 /**
- * Walks a DOM tree and collects text and images in order.
+ * Trims the ends (so spans and content always agree), drops marks from runs
+ * that are only whitespace — a bold space is indistinguishable from a plain
+ * one and would make an unformatted block look formatted — and merges runs
+ * that end up alike.
+ */
+function tidySpans(spans: Span[]): Span[] {
+  const trimmed = spans.map((s) => ({ ...s }))
+  if (trimmed.length) trimmed[0].text = trimmed[0].text.replace(/^\s+/, '')
+  if (trimmed.length) trimmed[trimmed.length - 1].text = trimmed[trimmed.length - 1].text.replace(/\s+$/, '')
+
+  const out: Span[] = []
+  for (const s of trimmed) {
+    if (!s.text) continue
+    const marks = s.text.trim() ? s.marks : undefined
+    const last = out[out.length - 1]
+    if (last && (last.marks ?? []).join('') === (marks ?? []).join('')) last.text += s.text
+    else out.push(marks?.length ? { text: s.text, marks } : { text: s.text })
+  }
+  return out
+}
+
+/**
+ * Walks a DOM tree and collects text, images, headings, list items and
+ * bold/italic runs, in order.
+ *
+ * Everything is gathered a line at a time. A heading or a list item becomes
+ * its own block; a run of ordinary lines is merged back into one block joined
+ * by newlines, which is the shape notes had before formatting existed.
  *
  * `pre` is for our own editor rather than pasted HTML. The editor is
  * `white-space: pre-wrap`, so Shift+Enter puts a real newline inside a text
@@ -54,30 +106,66 @@ export function normalizeMathUnicode(s: string): string {
  */
 export function domToBlocks(root: Node, baseUrl?: string, { pre: preRoot = false } = {}): Block[] {
   const blocks: Block[] = []
-  let buffer = ''
-  const flush = () => {
-    if (buffer) blocks.push({ type: 'text', content: buffer })
-    buffer = ''
+  const marks: Mark[] = []
+  let spans: Span[] = []
+  let style: BlockStyle | undefined
+  let list: ListKind | undefined
+
+  const text = () => spans.map((s) => s.text).join('')
+
+  const add = (value: string) => {
+    if (!value) return
+    const key = marks.join('')
+    const last = spans[spans.length - 1]
+    if (last && (last.marks ?? []).join('') === key) last.text += value
+    else spans.push(marks.length ? { text: value, marks: [...marks] } : { text: value })
   }
+
+  /**
+   * The line break a block element implies. Idempotent, so `<div>a</div>`
+   * gives one break and not three; `<br>` adds one unconditionally, which is
+   * what makes a blank line.
+   */
   const newline = () => {
-    buffer = buffer.replace(/ +$/, '')
-    if (buffer && !buffer.endsWith('\n')) buffer += '\n'
+    const t = text()
+    if (!t || t.endsWith('\n')) return
+    const last = spans[spans.length - 1]
+    last.text = last.text.replace(/ +$/, '')
+    last.text += '\n'
   }
-  // Like browsers: runs of whitespace in HTML are one space; only block
-  // elements and <br> make new lines (except inside <pre>).
-  const walk = (node: Node, pre = false) => {
+
+  /** Ends a block and keeps it if there is anything in it. */
+  const flush = () => {
+    const squeezed = preRoot ? spans : spans.map((s) => ({ ...s, text: s.text.replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n') }))
+    const tidied = tidySpans(squeezed)
+    const content = tidied.map((s) => s.text).join('')
+    if (content) {
+      const block: Block = { type: 'text', content }
+      if (style) block.style = style
+      if (list) block.list = list
+      if (tidied.some((s) => s.marks?.length)) block.spans = tidied
+      blocks.push(block)
+    }
+    spans = []
+  }
+
+  const walk = (node: Node, pre: boolean) => {
     if (node.nodeType === 3) {
-      let t = node.textContent ?? ''
+      let t = normalizeMathUnicode((node.textContent ?? '').replace(/ /g, ' '))
+      // In pasted HTML a newline is layout, not a line break; in our own
+      // editor it is exactly a line break, so it survives untouched.
       if (!pre) {
         t = t.replace(/\s+/g, ' ')
-        if (!buffer || buffer.endsWith('\n')) t = t.replace(/^ /, '') // start of a line
+        const sofar = text()
+        if (!sofar || sofar.endsWith('\n')) t = t.replace(/^ /, '') // start of a line
       }
-      buffer += normalizeMathUnicode(t.replace(/\u00a0/g, ' '))
+      add(t)
       return
     }
     if (node.nodeType !== 1) return
     const el = node as Element
     if (SKIP_TAGS.has(el.tagName)) return
+
     if (el.tagName === 'IMG') {
       let src = pickImgSrc(el)
       if (src && baseUrl && !/^(data:|https?:)/i.test(src)) {
@@ -95,47 +183,57 @@ export function domToBlocks(root: Node, baseUrl?: string, { pre: preRoot = false
       return
     }
     if (el.tagName === 'BR') {
-      buffer += '\n'
+      add('\n')
       return
     }
+
+    const mark = markOf(el)
+    if (mark) marks.push(mark)
+
+    // A heading or a list item is a block of its own, so whatever was being
+    // collected is closed off first and reopened afterwards. Everything else
+    // only implies a line break.
+    const heading = HEADINGS[el.tagName]
+    const own = !!heading || el.tagName === 'LI'
     const isBlock = BLOCK_TAGS.has(el.tagName)
-    if (isBlock) newline()
+    if (own) flush()
+    else if (isBlock) newline()
+
+    const outerStyle = style
+    const outerList = list
+    if (heading) style = heading
+    if (el.tagName === 'LI') list = listKindOf(el)
+
     el.childNodes.forEach((c) => walk(c, pre || el.tagName === 'PRE'))
-    if (isBlock) newline()
+
+    if (own) flush()
+    else if (isBlock) newline()
+    style = outerStyle
+    list = outerList
+    if (mark) marks.pop()
   }
+
   root.childNodes.forEach((c) => walk(c, preRoot))
   flush()
   return tidyBlocks(blocks, preRoot)
 }
 
 /**
- * Merges adjacent text, collapses extra spaces and blank lines, and trims each
- * text block. Images are shown as their own block, so the text around them
- * needs no leading or trailing line breaks.
+ * Merges runs of ordinary lines back into single blocks, so a plain note keeps
+ * the one-block-many-lines shape it has always had. Headings, list items and
+ * anything carrying marks stay on their own.
  */
 export function tidyBlocks(blocks: Block[], pre = false): Block[] {
-  const merged: Block[] = []
+  const isPlain = (b: Block | undefined): b is Extract<Block, { type: 'text' }> =>
+    !!b && b.type === 'text' && !b.style && !b.list && !b.spans
+  const out: Block[] = []
   for (const b of blocks) {
-    const last = merged[merged.length - 1]
-    if (b.type === 'text' && last?.type === 'text') last.content += b.content
-    else merged.push(b.type === 'text' ? { ...b } : b)
+    const last = out[out.length - 1]
+    if (isPlain(b) && isPlain(last)) last.content += '\n' + b.content
+    else out.push(b.type === 'text' ? { ...b } : b)
   }
-  return merged
-    .map((b) =>
-      b.type !== 'text'
-        ? b
-        : {
-            ...b,
-            // Pasted HTML gets squeezed: runs of spaces, the indentation that
-            // comes with wrapped source and stacks of blank lines are all
-            // noise there. What someone typed themselves is left alone apart
-            // from its ends.
-            content: pre
-              ? b.content.trim()
-              : b.content.replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim(),
-          },
-    )
-    .filter((b) => b.type === 'image' || b.content !== '')
+  // Stacks of blank lines are noise in pasted HTML; what someone typed is left alone.
+  return pre ? out : out.map((b) => (b.type === 'text' ? { ...b, content: b.content.replace(/\n{3,}/g, '\n\n') } : b))
 }
 
 export function htmlToBlocks(html: string, baseUrl?: string): Block[] {

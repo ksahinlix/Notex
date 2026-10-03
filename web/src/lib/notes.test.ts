@@ -50,3 +50,36 @@ describe('content helpers', () => {
     expect(matchesQuery(n, undefined, 'proje')).toBe(true)
   })
 })
+
+describe('withImages keeps formatting (D27)', () => {
+  const formatted = {
+    text: 'Başlık\nmadde',
+    blocks: [
+      { type: 'text' as const, content: 'Başlık', style: 'h2' as const },
+      { type: 'text' as const, content: 'madde', list: 'bullet' as const },
+    ],
+  }
+
+  it('leaves the headings and lists alone and puts the image after them', () => {
+    expect(withImages(formatted, ['data:image/png;base64,A']).blocks).toEqual([
+      { type: 'text', content: 'Başlık', style: 'h2' },
+      { type: 'text', content: 'madde', list: 'bullet' },
+      { type: 'image', src: 'data:image/png;base64,A' },
+    ])
+  })
+
+  it('keeps the images already there, in order', () => {
+    const withOne = withImages(formatted, ['a'])
+    expect(withImages(withOne, ['b']).blocks?.filter((b) => b.type === 'image')).toEqual([
+      { type: 'image', src: 'a' },
+      { type: 'image', src: 'b' },
+    ])
+  })
+
+  it('still works on a note that never had blocks', () => {
+    expect(withImages({ text: 'düz not' }, ['a']).blocks).toEqual([
+      { type: 'text', content: 'düz not' },
+      { type: 'image', src: 'a' },
+    ])
+  })
+})

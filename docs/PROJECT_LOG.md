@@ -59,6 +59,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D24 | Deleting puts a note in the trash for 30 days instead of wiping it; the existing cron does the emptying | Active |
 | D25 | A long note is clipped to ten lines in the list; clicking a note opens it, with its comment box ready | Active |
 | D26 | Notes carry flags from a fixed set of four, stored in plaintext, and the sidebar filters by them | Active |
+| D27 | Pasting keeps headings, lists and bold/italic; a block's plain text stays the source of truth | Active |
 
 ### D1 — Start from scratch
 - **What:** New repository structure. `docs/prototype.jsx` is kept only as a
@@ -720,6 +721,43 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   flagged after it exists. Worth adding if it turns out to be the common case.
 - **Revisit when:** four is not enough, or flags need to be per-user on a
   shared note rather than part of the note.
+
+### D27 — Formatting kept when pasting
+- **Decision:** pasting keeps **headings, bullet and numbered lists, and bold
+  and italic**. Everything else — links, colours, tables, fonts — is still
+  dropped. This replaces the old rule that formatting was dropped on purpose.
+- **Plain text stays the source of truth.** A block's `content` is always its
+  plain text, and `blocks` carry the formatting beside it. Search, the AI
+  classifier, the reminder parser, the trash preview and the reminder label
+  all read text and were untouched by this. A span list must always spell out
+  its own `content`; a test pins that.
+- **Shape:** a text block gains optional `style` ('h1'|'h2'|'h3'),
+  `list` ('bullet'|'number') and `spans` (runs of text with `b`/`i` marks).
+  A heading or a list item is a block of its own; a run of ordinary lines
+  still merges into one block of newline-separated text, which is the shape
+  every existing note already has. **Nothing needed migrating.**
+- **Headings are capped at three levels**, with h4–h6 folded into the
+  smallest, rather than inventing six sizes for a note card.
+- **Numbering is computed, not stored**, so a list still reads 1, 2, 3 after
+  an item is edited away. A paragraph or image between two lists restarts it.
+- **Marks come from tags *and* inline styles**, because Google Docs and Word
+  paste `<span style="font-weight:700">` rather than `<b>`.
+- **A whitespace-only run loses its marks.** A bold space looks exactly like a
+  plain one, and keeping it would make an otherwise unformatted block count as
+  formatted.
+- **Plain text pasted mid-sentence stays inline.** Only a paste that actually
+  carries structure goes through the block path; anything else is inserted as
+  text, so pasting a few words into the middle of a line does not break it.
+- **While searching, the plain text is shown instead of the runs.**
+  Highlighting across a bold run would mean splitting it, and seeing what
+  matched matters more there than seeing what was bold.
+- **Ctrl/Cmd+B and Ctrl/Cmd+I** write bold and italic by hand, since keeping
+  pasted ones and then being unable to make your own would be odd.
+- **`withImages` had to stop rebuilding blocks from the text**, which would
+  have flattened a formatted note the moment an image was added to it.
+- **Revisit when:** links are wanted (the obvious next one), or the editor
+  needs real list editing — pressing Enter inside a pasted list does not
+  continue it yet.
 
 ---
 
@@ -2306,3 +2344,77 @@ after it exists. Worth adding if that turns out to be the common way round.
 
 **Next:** keeping headings, lists and bold/italic when pasting, which is the
 bigger of the two and touches the editor, the reader and the block model.
+
+### 2026-10-03 — Pasting keeps headings, lists and bold/italic (D27, v1.15.0)
+
+**Asked for as:** "I want to keep the text formatting for example headers and
+bullet points when I paste." Chosen scope: those plus bold and italic.
+
+**What changed.** A text block gains optional `style` (h1–h3), `list`
+(bullet/number) and `spans` (runs of text carrying `b`/`i`). `htmlToBlocks`
+now reads them out of pasted HTML, the editor shows them while you write, and
+the card and reader draw them.
+
+**The rule that kept everything else working:** a block's `content` is always
+its plain text. Search, the AI classifier, the reminder parser, the trash
+preview and the reminder label all read that and needed no changes at all. A
+span list must always spell out its own `content` — a test pins it, and so
+does a browser check on what reaches `PUT /api/notes`.
+
+**No migration.** A run of ordinary lines still merges into one block of
+newline-separated text, which is exactly the shape every note already had, so
+existing notes are already valid and untouched.
+
+**Decisions inside it.** Headings cap at three levels, with h4–h6 folded into
+the smallest rather than inventing six sizes for a note card. Numbering is
+computed at render time, not stored, so a list still reads 1, 2, 3 after an
+item is edited away. Marks are read from inline styles as well as tags,
+because Google Docs and Word paste `<span style="font-weight:700">` rather
+than `<b>`. A whitespace-only run loses its marks, since a bold space looks
+exactly like a plain one and would make an unformatted block count as
+formatted. While searching, the plain text is shown instead of the runs:
+highlighting across a bold run would mean splitting it, and seeing what
+matched matters more there.
+
+**Two things that would have been quiet bugs.** Formatted text with no images
+used to bypass the HTML path entirely and arrive as plain text, so the paste
+would have kept nothing; now anything carrying structure goes through the
+block path, while anything without it is still inserted inline so pasting a
+few words mid-sentence does not break the line. And `withImages` rebuilt a
+note's blocks from `content.text`, which would have flattened a formatted note
+the moment an image was added to it.
+
+**Also:** Ctrl/Cmd+B and Ctrl/Cmd+I write bold and italic by hand, since
+keeping pasted ones while being unable to make your own would be odd.
+
+**A wrong turn worth recording.** The first attempt rewrote the walker to
+collect one line at a time. It was tidier, and it broke three things at once:
+blank lines between paragraphs vanished, indentation was trimmed away, and the
+idempotent "a block element implies at most one line break" rule was lost. The
+buffer-with-newlines model that was already there is what makes those work, so
+it stayed, and only the styled boundaries flush a block of their own.
+
+**How verified:** 21 unit tests in `paste.test.ts` (10 new, covering each
+heading level, both list kinds, nested lists taking the nearest kind,
+bold/italic as runs, both at once, inline styles, plain text coming out
+exactly as before, a whitespace-only run staying unmarked, and an image
+between a heading and a list), 6 for `lib/blocks.ts` numbering, 3 for
+`withImages`, and 20 Playwright checks: a formatted note rendering as
+formatting with the numbers restarting per list, a pasted article keeping its
+shape in the editor and in what is saved, the plain text staying intact for
+search, plain text pasted mid-sentence staying on the line, Ctrl+B saving a
+bold run, and a word inside a bold run still being found and highlighted.
+214 web tests, 94 server tests. The three earlier browser suites were re-run
+and still pass (28 + 22 + 7 checks).
+
+**One flaky test fixed on the way:** the trash test that checks an edit after a
+delete wins took its timestamp as "now". Postgres keeps microseconds while
+`toISOString()` truncates to milliseconds, so an edit landing in the same
+millisecond as the delete could look older than it and lose the race about
+half the time. The test now edits a second later, which is what a real client
+would do anyway.
+
+**Not done:** links. And pressing Enter inside a pasted list does not continue
+the list yet — the editor shows lists but does not edit them as lists.
+
+**Next:** offline sync, then images out of the notes table.

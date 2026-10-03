@@ -186,8 +186,11 @@ test("editing a note after deleting it brings it back; an older edit does not", 
   assert.equal(stale.status, 409, "a save older than the delete loses");
   assert.deepEqual(ids(await kaan("GET", "/api/notes")), [], "and the note stays deleted");
 
-  const now = new Date().toISOString();
-  await kaan("PUT", "/api/notes/n1", note({ id: "n1", content: { text: "yeniden" }, updatedAt: now }));
+  // A second later, not "now": Postgres keeps microseconds while
+  // toISOString() truncates to milliseconds, so an edit made inside the same
+  // millisecond as the delete can look older than it and lose the race.
+  const later = new Date(Date.now() + 1000).toISOString();
+  await kaan("PUT", "/api/notes/n1", note({ id: "n1", content: { text: "yeniden" }, updatedAt: later }));
   assert.deepEqual(ids(await kaan("GET", "/api/notes")), ["n1"], "a newer one brings it back");
   assert.deepEqual(ids(await kaan("GET", "/api/notes/trash")), []);
 });
