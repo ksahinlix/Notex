@@ -2418,3 +2418,76 @@ would do anyway.
 the list yet — the editor shows lists but does not edit them as lists.
 
 **Next:** offline sync, then images out of the notes table.
+
+### 2026-10-20 — The site went down silently; now it always says why (v1.15.1)
+**What happened:** https://notex-r2zk.onrender.com stopped answering, with no
+change on our side since 3 October. Requests reached Render (TLS fine) but got
+no answer, even after 2.5 minutes, well past the normal ~50 s free-tier wake-up.
+So the instance was not starting.
+
+**What was checked:**
+- **The code itself is fine.** I ran Render's exact build command on `main`,
+  migrated an empty database twice and started the server: it serves the page
+  and `/api/health`. All tests pass (214 web, 93 server).
+- **Services the app depends on** (from `render.yaml`, `.env.example` and this
+  log):
+
+  | Service | What it does | Required? |
+  |---|---|---|
+  | Render | hosts the web service (free) | yes |
+  | Neon | the Postgres database | yes |
+  | Google OAuth client | sign-in (`GOOGLE_CLIENT_ID`) | yes |
+  | Cloudflare Workers AI | folder suggestions, search | no |
+  | cron-job.org | calls `/api/reminders/due` and `/api/backup` with `CRON_SECRET` | no |
+  | Web Push (VAPID keys) | reminder notifications | no |
+  | Cloudflare R2 | backups pushed by the server (never enabled, see D23) | no |
+  | Windows Task Scheduler | `pull-backup.ps1` fetching `GET /api/backup` | no |
+
+  Only Render, Neon and Google can stop the site. None of the optional ones can.
+- **Neon could not be checked from the cloud session.** Its HTTPS endpoint
+  answers "password authentication failed" for a made-up endpoint as well, so
+  without the real password it says nothing about the project's state.
+
+**Why it was invisible:** the start command was
+`npm run migrate && npm start`, and the pool had no connection timeout. If the
+database could not be reached, migrate waited instead of failing, so Express
+never started. Likewise a missing `GOOGLE_CLIENT_ID` or `SESSION_SECRET` threw
+at startup. Either way Render saw a service that never came up and held every
+request open. Nothing outside could tell which it was.
+
+**What changed:**
+- `server/src/startup.js`:
+  - `missingSettings` lists the required settings that are absent.
+  - `describeDbError` turns a database error into a short, public-safe reason:
+    wrong password, over quota, endpoint disabled, host not found, refused, or
+    timeout. No user names or hosts.
+  - `migrateWithRetry` applies the schema, retrying every 30 s.
+- `server/src/index.js`:
+  - If a required setting is missing, a tiny server answers `/api/health` with
+    `{"problem":"missing settings","missing":[...]}` and a 503 Turkish message
+    for everything else.
+  - Otherwise it listens **first** and migrates in the background.
+- `server/src/db.js`: `connectionTimeoutMillis: 15 s`.
+- `/api/health` now says `reason` when the database is down, and `schema`
+  (`pending` / `applied`) when it is up.
+- `render.yaml`: the start command is just `cd server && npm start`.
+  - The service was created by hand in the dashboard, so Render may still run
+    the old `npm run migrate && npm start`.
+  - That is why `db/migrate.js` now exits 0 on Render (`RENDER` is set there)
+    after logging the error, so the old command cannot block the start either.
+  - Locally it still exits 1.
+
+**How verified:**
+- 3 new unit tests (`test/startup.test.js`).
+- Each scenario run as a real server start, reading `/api/health`:
+  - A missing `GOOGLE_CLIENT_ID` gave a named list.
+  - A wrong database password: the site answered, with
+    "wrong database password".
+  - An unreachable database: "database refused the connection".
+  - Everything right: `db: up, schema: applied`.
+  - The old start command with a bad database: migrate logged and continued,
+    and the server came up.
+- All server test files (each on a fresh database) and 214 web tests pass.
+
+**Next:** deploy this. Then `/api/health` on the live site names the real cause
+of the outage, to fix in Render or Neon.

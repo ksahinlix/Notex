@@ -8,6 +8,9 @@ if (!process.env.DATABASE_URL) {
 export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   max: 5,
+  // Fail instead of waiting forever when the database cannot be reached, so
+  // the error shows up in /api/health and the logs (see startup.js).
+  connectionTimeoutMillis: 15_000,
 });
 
 // Neon closes idle connections when its compute suspends. Without this

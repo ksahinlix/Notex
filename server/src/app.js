@@ -8,6 +8,7 @@ import {
   sessionCookieOptions, verifySessionToken,
 } from "./auth.js";
 import { findUser, toApiUser, upsertGoogleUser } from "./users.js";
+import { describeDbError } from "./startup.js";
 import { aiRouter } from "./routes/ai.js";
 import { backupDownloadRoute, backupRoute, exportRouter } from "./routes/backup.js";
 import { imageProxyRouter } from "./routes/imageProxy.js";
@@ -32,6 +33,8 @@ export function createApp({
   push = null, cronSecret = null,
   // Backups (D23): null r2 = nothing is written anywhere, the rest still works.
   r2 = null,
+  // Whether the schema has been applied yet (index.js migrates in the background).
+  schemaState = () => "applied",
 }) {
   const app = express();
   app.set("trust proxy", 1); // Render sits behind a proxy; needed for req.ip / req.secure
@@ -42,9 +45,10 @@ export function createApp({
   app.get("/api/health", async (_req, res) => {
     try {
       await pool.query("SELECT 1");
-      res.json({ ok: true, db: "up", version: VERSION });
-    } catch {
-      res.status(503).json({ ok: false, db: "down" });
+      res.json({ ok: true, db: "up", schema: schemaState(), version: VERSION });
+    } catch (err) {
+      // Says what kind of failure it is, so an outage can be diagnosed from outside.
+      res.status(503).json({ ok: false, db: "down", reason: describeDbError(err), version: VERSION });
     }
   });
 

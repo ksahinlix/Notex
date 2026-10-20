@@ -8,7 +8,8 @@ services:
     runtime: node
     plan: free
     buildCommand: cd web && npm ci --include=dev && npm run build && cd ../server && npm ci --omit=dev
-    startCommand: cd server && npm run migrate && npm start
+    # The server applies the schema itself at startup (server/src/startup.js).
+    startCommand: cd server && npm start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
