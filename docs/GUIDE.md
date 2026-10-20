@@ -332,7 +332,7 @@ It contains the password — it lives only in `server/.env` (your PC) and in
 Render's settings, never in Git. (Early on, the password was pasted into a
 chat and then rotated; that's the reflex to keep.)
 
-### 3.9 Render (hosting)
+### 3.9 Render (hosting, before D28)
 
 **What.** A cloud service that runs our server. We use one free **Web
 Service**, defined in `render.yaml` (a "Blueprint"):
@@ -355,6 +355,36 @@ healthCheckPath: /api/health
 - **Free tier**: the service **sleeps after ~15 minutes idle**; the first
   visit afterwards takes up to a minute. Logs are in the dashboard's **Logs**
   tab — the first place to look when something fails in production.
+
+### 3.9b Docker and the home server (D28)
+
+**What.** Since D28 Notex runs on the owner's home server instead of Render
+and Neon. **Docker** packs a program and everything it needs into an
+*image*, and runs it as a *container*. **Docker Compose** starts several
+containers together from one file, `deploy/compose.yaml`:
+
+| Container | What it is |
+|---|---|
+| `db` | Postgres 17. Its data lives in a Docker *volume*, which survives restarts and rebuilds. |
+| `app` | Our image, built by the `Dockerfile` at the repo root: it builds `web/` and installs `server/`, the same steps as Render's build. On start it applies the schema, then runs Express. |
+| `backup` | Runs `deploy/backup.sh`: a `pg_dump` every night at 03:00 into `deploy/backups/`, kept 14 days. |
+| `clock` | Calls `/api/reminders/due` every five minutes, the job cron-job.org did. |
+
+The containers talk over a private Docker network (`app` reaches the
+database at the host name `db`). Only the app is published, and only on
+`127.0.0.1:8000`, so nothing on the home network can reach it directly.
+
+**Tailscale Funnel** is how the internet gets in: `tailscale funnel --bg 8000`
+gives the machine a public HTTPS address (`https://<machine>.<tailnet>.ts.net`)
+with a real certificate, without opening a port on the router. Friends only
+need the link.
+
+**Secrets** live in `deploy/.env` on the server (never in git), copied from
+Render so sessions and notifications keep working.
+
+**Everyday commands** (in `deploy/`): `docker compose up -d --build` after a
+`git pull` to update, `docker compose logs -f app` to read logs,
+`docker compose ps` to see what runs.
 
 ### 3.10 Cloudflare Workers AI (the AI provider)
 
@@ -1252,7 +1282,8 @@ schema changes are safe; for risky ones we used a throwaway database.
 2. edit → `npm test` / `npm run lint` / `npm run build`
 3. `git add -A && git commit -m "…"` → `git push -u origin my-change`
 4. open a pull request on GitHub, try it locally, merge
-5. Render deploys in ~1–2 minutes; check `/api/health` and the **Logs** tab
+5. On the home server: `git pull` and `docker compose up -d --build` in
+   `deploy/` (D28); check `/api/health` and `docker compose logs app`
 
 ### Change the database
 
@@ -1270,7 +1301,7 @@ If a secret was ever pasted somewhere public, create a new one and replace it.
 
 | Symptom | Look at |
 |---|---|
-| Site doesn't load / "Yükleniyor" forever | Render **Logs**; free service may be waking up (~1 min) |
+| Site doesn't load / "Yükleniyor" forever | on the home server: `docker compose ps` and `docker compose logs app` in `deploy/`; is the machine on, is Funnel on (`tailscale funnel status`)? |
 | Red banner "kaydedilemedi (…)" | the reason in brackets; browser DevTools → **Network** tab |
 | AI stopped suggesting | search shows the AI error text; limits (150/day); Cloudflare dashboard usage |
 | "password authentication failed" | `DATABASE_URL` in `.env`/Render (copy with Neon's copy button) |

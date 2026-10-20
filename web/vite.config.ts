@@ -7,11 +7,11 @@ import { defineConfig } from 'vite'
 // Which build is running. The number people read is package.json's version
 // ("v1.0.3"); bump it with every deploy. The commit is kept alongside it, so
 // a build can still be identified exactly, and it is what the running page
-// compares with the server to notice a deploy. Render sets RENDER_GIT_COMMIT;
-// locally we ask git, and fall back to "dev".
+// compares with the server to notice a deploy. Render sets RENDER_GIT_COMMIT,
+// the Docker build passes GIT_COMMIT (D28); otherwise we ask git, and fall back to "dev".
 function version() {
   const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
-  const sha = process.env.RENDER_GIT_COMMIT ?? (() => {
+  const sha = process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || (() => {
     try {
       return execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim()
     } catch {

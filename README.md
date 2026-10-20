@@ -14,7 +14,9 @@ notes, and end-to-end encrypted folders. Web first, then mobile.
 server/   Node.js + Express API, Postgres schema (db/schema.sql)
 web/      Vite + React + TypeScript app
 docs/     project log, prototype, original summary
-render.yaml  deployment config for Render
+deploy/      Docker Compose stack for the home server (D28)
+Dockerfile   one image: built web app + server
+render.yaml  the old deployment config for Render, kept as a way back
 ```
 
 ## Running locally
@@ -112,7 +114,33 @@ The server's database tests start a throwaway local Postgres by themselves
 database instead, put `TEST_DATABASE_URL=...` in `server/.env.test`.
 **Its tables are wiped on every run**, so never point it at real data.
 
-## Deploying (Render + Neon)
+## Deploying on the home server (D28)
+
+Requirements: Docker with Compose, and Tailscale on the machine.
+
+```bash
+git clone https://github.com/ksahinlix/Notex.git && cd Notex/deploy
+cp .env.example .env          # fill it in: copy the secrets from Render
+GIT_COMMIT=$(git rev-parse HEAD) docker compose up -d --build
+curl http://127.0.0.1:8000/api/health        # {"ok":true,"db":"up",...}
+sudo tailscale funnel --bg 8000              # prints the public https://<machine>.<tailnet>.ts.net address
+```
+
+Then add that address to the Google OAuth client's **Authorized JavaScript
+origins** (see Google login setup).
+
+- **Update:** `git pull`, then the same `docker compose up -d --build`. The
+  schema is applied on each start.
+- **Logs:** `docker compose logs -f app` (or `backup`, `clock`).
+- **Backups:** every night at 03:00 into `deploy/backups/`, kept 14 days. Restore one:
+  `docker compose exec -T db pg_restore -U notex -d notex --clean --if-exists < backups/notex-<time>.dump`
+- **Restore a JSON backup** (from `pull-backup.ps1` or `/api/backup`):
+  `docker compose run --rm --no-deps -v "$PWD/in:/in" app node scripts/restore-backup.mjs /in/<file>.json.gz --yes`
+- **Move from Neon:** `pg_dump -Fc "<neon url>" > neon.dump`, then the
+  `pg_restore` above. Or restore the newest JSON backup.
+- The stack binds nothing but `127.0.0.1:8000`; no router ports are opened.
+
+## Deploying (Render + Neon, before D28)
 
 1. Push this repository to GitHub.
 2. In Render: **New → Blueprint**, then pick the repo. Render reads `render.yaml`.

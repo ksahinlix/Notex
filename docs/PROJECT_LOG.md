@@ -37,13 +37,13 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D2 | Web first, then mobile, then maybe desktop | Active |
 | D3 | AI runs in the browser; AI is for search + classification only, no chatbot | Superseded by D15 (no chatbot still applies) |
 | D4 | Backend: Node.js + Express, handles storage/auth only | Active |
-| D5 | Database: Postgres on Neon (free tier) | Active |
-| D6 | Hosting: one Render web service serves both API and web app | Active |
+| D5 | Database: Postgres on Neon (free tier) | Superseded by D28 |
+| D6 | Hosting: one Render web service serves both API and web app | Superseded by D28 (one service for API + web app still applies) |
 | D7 | Single-user login: password hash in env var + signed cookie | Superseded by D16 |
 | D8 | Folder encryption: AES-GCM in the browser, no password hash stored | Active |
 | D9 | Sync model: client-generated IDs, last-write-wins, soft deletes | Active |
 | D10 | Web stack: Vite + React + TypeScript; server in plain JavaScript | Active |
-| D11 | Home server is only a backup target (Phase 2) | Active |
+| D11 | Home server is only a backup target (Phase 2) | Superseded by D28 |
 | D12 | Embedding model: multilingual-e5-small, opt-in, in a Web Worker | Superseded by D15 |
 | D13 | Category model: Gemma-2-2B via WebLLM (WebGPU) creates folders itself | Superseded by D15 (prompt kept) |
 | D15 | AI runs on the server via Cloudflare Workers AI (free tier) | Active |
@@ -60,6 +60,7 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
 | D25 | A long note is clipped to ten lines in the list; clicking a note opens it, with its comment box ready | Active |
 | D26 | Notes carry flags from a fixed set of four, stored in plaintext, and the sidebar filters by them | Active |
 | D27 | Pasting keeps headings, lists and bold/italic; a block's plain text stays the source of truth | Active |
+| D28 | App and Postgres move to the home server in Docker Compose, published by Tailscale Funnel; nightly pg_dump on the box | Active |
 
 ### D1 — Start from scratch
 - **What:** New repository structure. `docs/prototype.jsx` is kept only as a
@@ -760,6 +761,46 @@ summary is kept in [`original-summary-tr.md`](original-summary-tr.md).
   continue it yet.
 
 ---
+
+### D28 — Notex runs on the home server
+- **Decision:** the app and its database leave Render and Neon and run on the
+  home server (Debian 13, i5-7500T, 16 GB RAM, Docker) as one Docker Compose
+  stack in `deploy/`:
+  - `db`: the official `postgres:17` image, data in a named volume.
+  - `app`: the repo's `Dockerfile`, which builds the web app and the server
+    into one image and runs the idempotent schema on every start, as Render
+    did. It listens on `127.0.0.1:8000` only.
+  - `backup`: `pg_dump` every night at 03:00 into `deploy/backups/`, kept 14
+    days.
+  - `clock`: calls `/api/reminders/due` every five minutes, replacing
+    cron-job.org (reminders and emptying the trash, D21 and D24).
+- **How it is reached:** **Tailscale Funnel**, with no domain of our own. It
+  gives a public HTTPS address `https://<machine>.<tailnet>.ts.net`, opens no
+  router port and works behind CGNAT. Friends need only the link, not
+  Tailscale. HTTPS matters: Google sign-in, the `Secure` cookie, the service
+  worker and Web Push all need it, and nothing is lost compared with Render.
+- **Why:** Neon's free quota ran out on 2026-10-20. The most likely cause is
+  the reminder scheduler: it calls the server every few minutes, so the
+  database never suspends and the compute hours run out. D11 had kept the
+  home server for backups only because it could not run LLMs, and AI moved
+  to Cloudflare in D15, so that reason is gone. The app is for the owner and
+  a couple of friends, so home uptime is acceptable, and a home server never
+  sleeps the way Render's free service did.
+- **Backups (simple on purpose):** the owner accepts losing up to a day. The
+  nightly dump guards against mistakes and bad updates, but it sits on the
+  only disk, an old 320 GB laptop HDD (WD3200BPVT). The copy that survives a
+  dead disk is the one that already exists: `scripts/pull-backup.ps1` pulling
+  `GET /api/backup` into OneDrive (D23), now pointed at the Funnel address.
+  Backing up on every change was considered and left out; it adds moving
+  parts for little over a nightly dump.
+- **Kept the same:** one origin for API and web app (D6), the same
+  environment variables, and the same `SESSION_SECRET` and VAPID keys as on
+  Render, so sessions and notification subscriptions survive the move.
+  `render.yaml` stays in the repo as a way back.
+- **Not touched:** Pi-hole and the other services on the box. The stack
+  binds nothing but `127.0.0.1:8000`.
+- **Revisit when:** the HDD shows errors (move to an SSD), or more people use
+  it than a home connection should carry.
 
 ## 3. Open questions
 
@@ -2418,3 +2459,27 @@ would do anyway.
 the list yet — the editor shows lists but does not edit them as lists.
 
 **Next:** offline sync, then images out of the notes table.
+
+### 2026-10-20 — Notex moves to the home server (D28, v1.16.0)
+**What:** a `Dockerfile` and a Docker Compose stack in `deploy/` (Postgres 17,
+the app, a nightly backup, and a five-minute reminder clock), published by
+Tailscale Funnel. The build id now also comes from `GIT_COMMIT`, since the
+image has no `.git` and is not on Render. `restore-backup.mjs` only uses TLS
+when the URL asks for it, so it can restore into the Postgres on the Docker
+network.
+
+**Why:** Neon's free quota ran out (see D28).
+
+**How verified:** in a cloud session, the image built and the whole stack came
+up: `/api/health` answered `db: up` with the commit, the page was served, the
+clock's call returned `{"due":0,…}`, the first dump was written, restored
+into a fresh database with all 8 tables, and a JSON backup from `/api/backup`
+was restored with `restore-backup.mjs` inside the app container. Server tests:
+93 pass against Postgres 17 (one fresh database per test file, since root
+cannot run the embedded Postgres); web: 214 tests, lint and build pass.
+
+**Next:** on the home server, fill `deploy/.env` from Render, start the stack,
+turn on Funnel, add the `ts.net` address to the Google OAuth origins, restore
+the data (the newest OneDrive backup now, or `pg_dump` from Neon once its
+quota resets), point `pull-backup.ps1` there, and stop cron-job.org. Keep
+Render and Neon for two weeks as a fallback.
