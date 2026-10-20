@@ -2497,7 +2497,16 @@ to-do folders, 2 shares. Push subscriptions are not in a backup, so each
 device turns notifications on again.
 
 **How verified:** `/api/health` answers `{"ok":true,"db":"up","version":"910e1e6"}`
-both on the box and through the public address, and `/` serves the app.
+on the box and from outside the tailnet, and `/` serves the app.
+
+**A wrong turn worth recording.** The first "it works from outside" was
+wrong: the PC that tested it was on the tailnet, so it reached the machine
+directly and never went through Funnel. From a device off the tailnet the
+address did not answer under Tailscale 1.102, most likely a Funnel bug in
+that release. Downgrading the home server to **1.98.10** and holding it
+(`apt-mark hold tailscale`) fixed it. Two lessons: test Funnel from a phone
+on mobile data, never from a tailnet device; and some public resolvers kept
+returning the `100.x` tailnet IP for a while after the fix.
 
 **Setup notes:** Funnel had to be allowed for the tailnet once (a link printed
 by the first `tailscale funnel`), `tailscale set --operator=kaan` removed the
@@ -2510,4 +2519,6 @@ need for sudo, and the public DNS name took about 25 minutes to appear.
   unconditionally, which would undo edits made at home since.
 - Turn off cron-job.org once sign-in is checked; the `clock` service does
   its job now. Then retire Render and Neon after two quiet weeks.
+- Tailscale is held at 1.98.10. Before releasing the hold, check that a
+  newer release fixed Funnel, and test from off the tailnet.
 
