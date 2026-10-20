@@ -16,14 +16,14 @@
   .\pull-backup.ps1 -Dir "$env:USERPROFILE\OneDrive\Notex-yedek"
 #>
 param(
-  [string]$Url = "https://notex-r2zk.onrender.com/api/backup",
+  [string]$Url = "https://homeserver.tail9038f4.ts.net/api/backup",
   # The server's CRON_SECRET. Prefer the environment variable over typing it
   # here, so it stays out of the file and out of your shell history.
   [string]$Key = $env:NOTEX_CRON_KEY,
   [string]$Dir = "$env:USERPROFILE\OneDrive\Notex-yedek",
   # How many files to keep. One a day, so 60 is two months.
   [int]$Keep = 60,
-  # Render's free instance sleeps; waking it can take a minute.
+  # Retries cover a short outage (the home server restarting, D28).
   [int]$Retries = 3
 )
 

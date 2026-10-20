@@ -126,6 +126,22 @@ curl http://127.0.0.1:8000/api/health        # {"ok":true,"db":"up",...}
 sudo tailscale funnel --bg 8000              # prints the public https://<machine>.<tailnet>.ts.net address
 ```
 
+Live at **https://homeserver.tail9038f4.ts.net**. Notes from the first setup:
+
+- Funnel must be allowed for the tailnet once: the first `tailscale funnel`
+  prints a `login.tailscale.com/f/funnel?...` link to open (or add the
+  `funnel` node attribute in the tailnet policy, with MagicDNS and HTTPS
+  certificates on).
+- `sudo tailscale set --operator=$USER` once lets you run `tailscale funnel`
+  without sudo.
+- The public DNS name took about 25 minutes to appear the first time.
+- Test the public address from a device **off** the tailnet (a phone on
+  mobile data). A tailnet device reaches the machine directly and proves
+  nothing about Funnel.
+- Funnel did not work from outside under Tailscale 1.102; the server is held
+  at 1.98.10 (`sudo apt-mark hold tailscale`). Release the hold only after
+  checking that a newer version works.
+
 Then add that address to the Google OAuth client's **Authorized JavaScript
 origins** (see Google login setup).
 
