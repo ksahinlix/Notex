@@ -36,7 +36,10 @@ if (!write) {
   process.exit(0);
 }
 
-const pool = new pg.Pool({ connectionString: url, ssl: url.includes("localhost") ? false : { rejectUnauthorized: false } });
+// TLS only when the URL asks for it: Neon's does, the home server's Postgres
+// on the Docker network (D28) and a local one do not.
+const ssl = /sslmode=(require|verify)/.test(url) ? { rejectUnauthorized: false } : false;
+const pool = new pg.Pool({ connectionString: url, ssl });
 const client = await pool.connect();
 try {
   await client.query("BEGIN");

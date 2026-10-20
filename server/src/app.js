@@ -17,9 +17,10 @@ import { sharesRouter } from "./routes/shares.js";
 import { todoFoldersRouter } from "./routes/todoFolders.js";
 import { pushRouter, remindersDueRoute } from "./routes/push.js";
 
-// Which build is running. Render sets RENDER_GIT_COMMIT on every deploy; the
-// browser compares it with its own build and offers to reload when they differ.
-const VERSION = (process.env.RENDER_GIT_COMMIT ?? "").slice(0, 7) || "dev";
+// Which build is running. Render sets RENDER_GIT_COMMIT on every deploy, the
+// Docker image GIT_COMMIT (D28); the browser compares it with its own build
+// and offers to reload when they differ.
+const VERSION = (process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || "").slice(0, 7) || "dev";
 
 // Builds the Express app. Kept separate from index.js so tests can create it
 // with their own database and secrets.
@@ -34,7 +35,7 @@ export function createApp({
   r2 = null,
 }) {
   const app = express();
-  app.set("trust proxy", 1); // Render sits behind a proxy; needed for req.ip / req.secure
+  app.set("trust proxy", 1); // Render and Tailscale Funnel both sit in front; needed for req.ip / req.secure
   app.use(compression());
   app.use(express.json({ limit: "10mb" })); // images are still inline data URLs for now
   app.use(cookieParser());

@@ -1,0 +1,89 @@
+# Notex on the home server (D28): the app, its Postgres, a nightly backup and
+# the reminder clock. Nothing here is reachable from outside the machine; the
+# app listens on 127.0.0.1:8000 and Tailscale Funnel publishes it over HTTPS.
+#
+#   cd deploy
+#   cp .env.example .env        # then fill it in
+#   GIT_COMMIT=$(git rev-parse HEAD) docker compose up -d --build
+#   sudo tailscale funnel --bg 8000
+name: notex
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: notex
+      POSTGRES_DB: notex
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "notex", "-d", "notex"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: ..
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-}
+    image: notex-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Inside the Docker network, so no TLS; the password never leaves it.
+      DATABASE_URL: postgres://notex:${POSTGRES_PASSWORD}@db:5432/notex
+    ports:
+      # Loopback only: Tailscale Funnel on the host is the one way in.
+      - "127.0.0.1:${NOTEX_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Nightly pg_dump into ./backups, keeping BACKUP_KEEP_DAYS days. It sits on
+  # the same disk, so it guards against mistakes, not a dead disk; the
+  # OneDrive pull (scripts/pull-backup.ps1) is the copy that leaves the house.
+  backup:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: notex
+      PGDATABASE: notex
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ:-Europe/Istanbul}
+      BACKUP_AT: ${BACKUP_AT:-03:00}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./backups:/backups
+      - ./backup.sh:/backup.sh:ro
+    entrypoint: ["sh", "/backup.sh"]
+    depends_on:
+      # After the app, so the first dump already holds the schema.
+      app:
+        condition: service_healthy
+
+  # Calls /api/reminders/due every five minutes: sends due reminders and
+  # empties the trash (D21, D24). Replaces cron-job.org.
+  clock:
+    image: busybox:1.37
+    restart: unless-stopped
+    environment:
+      CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET in deploy/.env}
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          wget -q -O - --header "x-cron-key: $$CRON_SECRET" --post-data "" http://app:8000/api/reminders/due || echo "reminders call failed"
+          echo
+          sleep 300
+        done
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  db-data:
