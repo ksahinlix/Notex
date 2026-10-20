@@ -2483,3 +2483,31 @@ turn on Funnel, add the `ts.net` address to the Google OAuth origins, restore
 the data (the newest OneDrive backup now, or `pg_dump` from Neon once its
 quota resets), point `pull-backup.ps1` there, and stop cron-job.org. Keep
 Render and Neon for two weeks as a fallback.
+
+### 2026-10-20 — Notex is live on the home server (D28)
+**What:** the stack from PR #31 runs on the home server in `~/Notex/deploy`,
+public at **https://homeserver.tail9038f4.ts.net** through Tailscale Funnel.
+`deploy/.env` has a new database password and `SESSION_SECRET` (everyone signs
+in once more); `CRON_SECRET` is the same key the Windows backup task already
+used, so `pull-backup.ps1` only needed the new URL, now its default.
+
+**Data:** restored from the newest OneDrive backup,
+`notex-20261016T090001Z.json.gz`: 4 users, 28 notes, 2 locked folders, 3
+to-do folders, 2 shares. Push subscriptions are not in a backup, so each
+device turns notifications on again.
+
+**How verified:** `/api/health` answers `{"ok":true,"db":"up","version":"910e1e6"}`
+both on the box and through the public address, and `/` serves the app.
+
+**Setup notes:** Funnel had to be allowed for the tailnet once (a link printed
+by the first `tailscale funnel`), `tailscale set --operator=kaan` removed the
+need for sudo, and the public DNS name took about 25 minutes to appear.
+
+**Open:**
+- Anything written on Render/Neon after 16 October is not on the home
+  server. When Neon's quota resets, merge it in, but first make
+  `restoreBackup()` keep the newer `updated_at`: today it overwrites a note
+  unconditionally, which would undo edits made at home since.
+- Turn off cron-job.org once sign-in is checked; the `clock` service does
+  its job now. Then retire Render and Neon after two quiet weeks.
+
